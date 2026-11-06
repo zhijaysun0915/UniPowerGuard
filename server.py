@@ -322,6 +322,8 @@ def collect_mac_telemetry():
 def map_app_meta(proc_name):
     low = proc_name.lower()
     mapping = [
+        ("l2.bin", "Lineage II 天堂2 (三開掛機)", "遊戲與高負載運算", "🎮"),
+        ("l2", "Lineage II 天堂2 (三開掛機)", "遊戲與高負載運算", "🎮"),
         ("chrome", "Google Chrome 瀏覽器", "網頁與多媒體", "🌐"),
         ("msedge", "Microsoft Edge", "網頁與多媒體", "🧭"),
         ("audiodg", "Windows 音訊引擎 (audiodg)", "系統多媒體", "🔊"),
