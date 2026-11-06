@@ -1,0 +1,1012 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>UniPowerGuard — 跨平台電腦與筆電電源管控中心 (Windows & macOS)</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft JhengHei", "PingFang TC", sans-serif;
+      background-color: #f4f3ef;
+      color: #2c302e;
+    }
+    .tab-btn-active {
+      background-color: #b7bab8;
+      color: #1f2421;
+      font-weight: 700;
+      box-shadow: inset 0 2px 4px rgba(0,0,0,0.08);
+    }
+    .tab-btn-inactive {
+      background-color: #ffffff;
+      color: #374151;
+      font-weight: 600;
+    }
+    .pill-active {
+      background-color: #a8aca9;
+      color: #111827;
+      font-weight: 700;
+    }
+    .pill-inactive {
+      background-color: #ffffff;
+      color: #374151;
+      font-weight: 600;
+    }
+    .ios-seg-active {
+      background-color: #ffffff;
+      color: #111827;
+      font-weight: 600;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+    }
+    .bar-transition {
+      transition: height 0.35s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.2s ease;
+    }
+  </style>
+</head>
+<body class="min-h-screen pb-12">
+
+  <!-- Top App Header & Cross-Platform Node Switcher -->
+  <header class="bg-white/90 backdrop-blur border-b border-stone-200 sticky top-0 z-30">
+    <div class="max-w-4xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-2.5">
+        <div class="w-9 h-9 rounded-xl bg-teal-700 text-white flex items-center justify-center font-bold text-lg shadow-sm">⚡</div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="font-bold text-base sm:text-lg text-stone-800">UniPowerGuard 電源管控中心</h1>
+            <span id="live-badge" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
+              <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>即時連線
+            </span>
+          </div>
+          <p class="text-xs text-stone-500" id="header-subtitle">支援 Windows 桌機/筆電 & macOS (MacBook / Mac mini)</p>
+        </div>
+      </div>
+
+      <!-- Node / Platform Profile Selector -->
+      <div class="flex items-center gap-2">
+        <label class="text-xs font-medium text-stone-500">監控節點：</label>
+        <select id="node-selector" onchange="switchNodeProfile(this.value)" class="text-xs sm:text-sm font-semibold bg-stone-100 border border-stone-300 rounded-lg px-2.5 py-1.5 text-stone-800 focus:outline-none focus:ring-2 focus:ring-teal-600">
+          <option value="sun_pc">🖥️ SUN_PC (Windows 11 算力主機)</option>
+          <option value="win_laptop">💻 Windows 筆電模式 (電池+AC)</option>
+          <option value="mac_mini">🍎 Mac mini Gateway (macOS)</option>
+          <option value="macbook">🔋 MacBook Pro 筆電 (macOS)</option>
+        </select>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="max-w-4xl mx-auto px-3 sm:px-5 pt-4">
+
+    <!-- Top 4 Main Navigation Tabs (Styled after Reference Image 1) -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-5">
+      <button onclick="switchMainTab('overview')" id="tab-overview" class="tab-btn-active flex items-center justify-center gap-2 py-3 px-3 rounded-2xl border border-stone-200 shadow-sm transition">
+        <span class="text-xl">🔌</span>
+        <span class="text-sm sm:text-base">用電總覽</span>
+      </button>
+      <button onclick="switchMainTab('devices')" id="tab-devices" class="tab-btn-inactive flex items-center justify-center gap-2 py-3 px-3 rounded-2xl border border-stone-200 shadow-sm transition">
+        <span class="text-xl">📋</span>
+        <span class="text-sm sm:text-base">電腦設備資訊</span>
+      </button>
+      <button onclick="switchMainTab('battery')" id="tab-battery" class="tab-btn-inactive flex items-center justify-center gap-2 py-3 px-3 rounded-2xl border border-stone-200 shadow-sm transition">
+        <span class="text-xl">🔋</span>
+        <span class="text-sm sm:text-base">電池與APP耗電</span>
+      </button>
+      <button onclick="switchMainTab('history')" id="tab-history" class="tab-btn-inactive flex items-center justify-center gap-2 py-3 px-3 rounded-2xl border border-stone-200 shadow-sm transition">
+        <span class="text-xl">🔍</span>
+        <span class="text-sm sm:text-base">歷史查詢</span>
+      </button>
+    </div>
+
+    <!-- =================================================================== -->
+    <!-- TAB 1: 用電總覽 (Reference Image 1: 年 / 月 / 日 / 時 + Bar Chart) -->
+    <!-- =================================================================== -->
+    <section id="view-overview" class="space-y-4">
+      <!-- Granularity Pills (年 / 月 / 日 / 時) + Legend -->
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-2">
+          <button onclick="setGranularity('year')" id="gran-year" class="pill-active px-4 py-2 rounded-xl border border-stone-200 shadow-sm text-sm transition">年</button>
+          <button onclick="setGranularity('month')" id="gran-month" class="pill-inactive px-4 py-2 rounded-xl border border-stone-200 shadow-sm text-sm transition">月</button>
+          <button onclick="setGranularity('day')" id="gran-day" class="pill-inactive px-4 py-2 rounded-xl border border-stone-200 shadow-sm text-sm transition">日</button>
+          <button onclick="setGranularity('hour')" id="gran-hour" class="pill-inactive px-4 py-2 rounded-xl border border-stone-200 shadow-sm text-sm transition">時</button>
+        </div>
+
+        <div class="flex items-center gap-4 text-xs sm:text-sm font-medium text-stone-600">
+          <span class="flex items-center gap-1.5"><span class="w-3.5 h-3.5 rounded-sm inline-block" style="background:#38a3dc;"></span><span id="legend-prev">前期 / 歷史</span></span>
+          <span class="flex items-center gap-1.5"><span class="w-3.5 h-3.5 rounded-sm inline-block" style="background:#00699e;"></span><span id="legend-curr">當期 / 最新</span></span>
+        </div>
+      </div>
+
+      <!-- Metric Selector Pill (總用電量 >) -->
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="relative inline-block">
+          <select id="metric-selector" onchange="renderOverviewChart()" class="appearance-none bg-white border border-stone-200 rounded-xl px-5 py-2.5 pr-10 text-sm sm:text-base font-semibold text-stone-800 shadow-sm cursor-pointer focus:outline-none">
+            <option value="kwh">總用電量 (度 kWh / Wh)</option>
+            <option value="watts">平均功率 (瓦特 W)</option>
+            <option value="cost">預估電費 (NT$ 元)</option>
+          </select>
+          <span class="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-stone-400 font-bold">&gt;</span>
+        </div>
+
+        <div class="text-xs sm:text-sm text-stone-600 bg-white px-3.5 py-2 rounded-xl border border-stone-200 shadow-sm">
+          即時插座功耗：<strong id="overview-live-watts" class="text-teal-700 text-base">71.5 W</strong>
+          <span class="text-stone-400 mx-1">|</span>
+          DC 內部：<span id="overview-dc-watts" class="font-semibold">61.5 W</span>
+        </div>
+      </div>
+
+      <!-- Main Chart Card (Matches Image 1 White Card + Grid + Dashed Line Callout) -->
+      <div class="bg-white rounded-2xl border border-stone-200 p-4 sm:p-6 shadow-sm">
+        <div class="flex items-center justify-between mb-2">
+          <span id="chart-unit-label" class="text-xs sm:text-sm font-semibold text-stone-500">度 (kWh)</span>
+          <div id="chart-selected-Readout" class="text-right">
+            <div id="callout-period" class="text-xs sm:text-sm font-bold text-stone-700">2026/11</div>
+            <div id="callout-value" class="text-sm sm:text-base font-extrabold text-amber-800">51.50度</div>
+          </div>
+        </div>
+
+        <!-- Bar Chart Plot Area -->
+        <div class="relative h-64 sm:h-72 pt-6 pb-8 px-2 border-b border-l border-stone-300 flex items-end justify-between gap-1.5 sm:gap-2.5" id="overview-bars-container">
+          <!-- Horizontal Reference Grid Lines -->
+          <div class="absolute inset-x-0 top-6 border-t border-stone-200 pointer-events-none flex items-center">
+            <span id="y-max-label" class="text-xs text-stone-400 -mt-5 pl-1">80</span>
+          </div>
+          <div class="absolute inset-x-0 top-1/3 border-t border-stone-200 pointer-events-none flex items-center">
+            <span id="y-mid2-label" class="text-xs text-stone-400 -mt-5 pl-1">60</span>
+          </div>
+          <div class="absolute inset-x-0 top-2/3 border-t border-stone-200 pointer-events-none flex items-center">
+            <span id="y-mid1-label" class="text-xs text-stone-400 -mt-5 pl-1">30</span>
+          </div>
+          <!-- Bars dynamically rendered here -->
+        </div>
+        <div class="text-right text-xs text-stone-500 mt-2" id="x-axis-unit-label">點擊任意柱狀圖可查看該時段詳細功耗與電費</div>
+      </div>
+
+      <!-- Bottom Summary Cards (Matches Image 1: 近12月用電量 & 近12月預估電費) -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+        <div class="bg-white rounded-2xl border border-stone-200 p-5 text-center shadow-sm">
+          <div id="summary-title-1" class="text-sm sm:text-base font-bold text-stone-700 mb-1.5">近12月累計用電量</div>
+          <div id="summary-val-1" class="text-xl sm:text-2xl font-extrabold text-stone-900">618.4 度</div>
+          <div id="summary-sub-1" class="text-xs text-stone-500 mt-1">日均約 1.71 度 (平均功率 71.5 W)</div>
+        </div>
+
+        <div class="bg-white rounded-2xl border border-stone-200 p-5 text-center shadow-sm">
+          <div class="flex items-center justify-center gap-1.5 mb-1.5">
+            <span id="summary-title-2" class="text-sm sm:text-base font-bold text-stone-700">預估電費統計</span>
+            <button onclick="promptTariff()" title="設定每度電單價" class="text-stone-500 hover:text-teal-700 font-bold text-sm px-1.5 py-0.5 rounded border border-stone-300 bg-stone-50">✎ 單價</button>
+          </div>
+          <div id="summary-val-2" class="text-xl sm:text-2xl font-extrabold text-teal-800">NT$ 2,783</div>
+          <div id="summary-sub-2" class="text-xs text-stone-400 mt-1">目前單價設定：NT$ 4.50 / 度 (點擊右上角可修改)</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- TAB 2: 電腦設備與電源管控 (Reference Image 2: 環境溫度 + 一鍵控制 + 設備卡片) -->
+    <!-- =================================================================== -->
+    <section id="view-devices" class="hidden space-y-5">
+      <!-- Top Environment & System Live Banner (Matches Image 2 Top Weather/Temp Banner) -->
+      <div class="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm flex flex-wrap items-center justify-between gap-4">
+        <div class="flex items-center gap-4">
+          <div class="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center text-2xl">⚡</div>
+          <div>
+            <div class="flex items-center gap-3">
+              <span id="dev-host-title" class="font-bold text-base sm:text-lg text-stone-800">SUN_PC 主機</span>
+              <span id="dev-power-scheme" class="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-200">平衡模式</span>
+            </div>
+            <div class="text-xs sm:text-sm text-stone-500 mt-0.5" id="dev-battery-banner">電源狀態：AC 市電直連 (PSU 轉換效率 86%)</div>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-6">
+          <div class="text-right">
+            <div class="text-xs text-stone-500">🌡️ 機殼/主機板溫度</div>
+            <div class="text-xl sm:text-2xl font-bold text-stone-800"><span id="banner-mb-temp">28</span> <span class="text-sm font-normal">°C</span></div>
+          </div>
+          <div class="text-right border-l border-stone-200 pl-6">
+            <div class="text-xs text-stone-500">🔌 即時總功耗 (AC)</div>
+            <div class="text-xl sm:text-2xl font-extrabold text-teal-700"><span id="banner-ac-watts">71.5</span> <span class="text-sm font-normal">W</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 一鍵控制 (Quick Power Scenarios - Matches Image 2) -->
+      <div class="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
+        <div class="flex items-center justify-between mb-3">
+          <div class="flex items-center gap-2 font-bold text-stone-700 text-base">
+            <span>👍</span>
+            <span>一鍵電源與算力控制</span>
+          </div>
+          <span id="control-feedback" class="text-xs font-semibold text-teal-700">點擊立即套用硬體功耗策略</span>
+        </div>
+
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+          <button onclick="sendControl('set_power_mode', 'eco')" class="flex flex-col items-start p-3.5 rounded-xl border border-stone-200 bg-stone-50 hover:bg-emerald-50 hover:border-emerald-300 transition text-left">
+            <span class="text-lg mb-1">🌿 省電靜音模式</span>
+            <span class="text-xs text-stone-500">Windows 省電 + GPU 162W</span>
+          </button>
+          <button onclick="sendControl('set_power_mode', 'balanced')" class="flex flex-col items-start p-3.5 rounded-xl border border-teal-300 bg-teal-50/60 hover:bg-teal-100/70 transition text-left">
+            <span class="text-lg mb-1">⚖️ 日常平衡模式</span>
+            <span class="text-xs text-stone-600">Windows 平衡 + GPU 171W</span>
+          </button>
+          <button onclick="sendControl('set_power_mode', 'performance')" class="flex flex-col items-start p-3.5 rounded-xl border border-stone-200 bg-stone-50 hover:bg-amber-50 hover:border-amber-300 transition text-left">
+            <span class="text-lg mb-1">🚀 AI 算力全開</span>
+            <span class="text-xs text-stone-500">高效能 + GPU 180W 滿血</span>
+          </button>
+          <button onclick="sendControl('unload_ollama', '1')" class="flex flex-col items-start p-3.5 rounded-xl border border-stone-200 bg-stone-50 hover:bg-rose-50 hover:border-rose-300 transition text-left">
+            <span class="text-lg mb-1">🧹 釋放 AI 顯存</span>
+            <span class="text-xs text-stone-500">卸載閒置 Ollama/Strata</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 我的電腦組件與設備 (2-Column Grid Matching Image 2 "我的家電") -->
+      <div>
+        <div class="flex items-center justify-between mb-3 px-1">
+          <div class="flex items-center gap-2 font-bold text-stone-700 text-base">
+            <span>🏠</span>
+            <span>我的硬體組件與算力節點 (即時 Sensor + 規格回推)</span>
+          </div>
+          <span class="text-xs text-stone-500">綠燈＝運行中 / 紅燈＝待命或關閉</span>
+        </div>
+
+        <div id="device-cards-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+          <!-- Populated dynamically by JS -->
+        </div>
+      </div>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- TAB 3: 電池與 APP 耗電 (Reference Image 3: iOS 電池設定風格) -->
+    <!-- =================================================================== -->
+    <section id="view-battery" class="hidden space-y-4">
+      <div class="bg-white rounded-2xl border border-stone-200 p-4 sm:p-6 shadow-sm space-y-5">
+        <!-- Segmented Control: 過去 24 小時 | 過去 10 天 -->
+        <div class="bg-stone-200/80 p-1 rounded-xl grid grid-cols-2 max-w-md mx-auto">
+          <button onclick="setBatteryRange('24h')" id="bat-seg-24h" class="ios-seg-active py-1.5 rounded-lg text-xs sm:text-sm transition">過去 24 小時</button>
+          <button onclick="setBatteryRange('10d')" id="bat-seg-10d" class="text-stone-600 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition">過去 10 天</button>
+        </div>
+
+        <!-- Last Charged / Power Supply Info -->
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-stone-100 pb-3">
+          <div>
+            <div class="text-base sm:text-lg font-bold text-stone-900" id="bat-status-headline">上次充電到 100% (AC 直連穩定供電中)</div>
+            <div class="text-xs sm:text-sm text-stone-400" id="bat-status-sub">今日 上午 08:00 · 電池健康度 100%</div>
+          </div>
+          <div class="text-right">
+            <span class="text-xs text-stone-400 block">當前總負載</span>
+            <span id="bat-live-watts" class="text-lg font-extrabold text-emerald-600">71.5 W</span>
+          </div>
+        </div>
+
+        <!-- Chart 1: 電池電量 / 功耗負載 (Green Bars like iOS Battery) -->
+        <div>
+          <div class="flex items-center justify-between mb-1.5">
+            <span class="text-xs sm:text-sm font-semibold text-stone-500" id="bat-chart1-title">電池電量與供電狀態 (%)</span>
+            <span class="text-xs text-emerald-600 font-medium">⚡ 綠色底條代表接上電源 / 充電區間</span>
+          </div>
+          <div class="relative h-36 border-t border-b border-stone-200 flex items-end justify-between gap-1 pt-3 pb-5 px-1" id="ios-battery-bars">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+
+        <!-- Chart 2: 活躍運算時間 (Blue Bars like iOS Activity) -->
+        <div>
+          <div class="flex items-center justify-between mb-1.5">
+            <span class="text-xs sm:text-sm font-semibold text-stone-500" id="bat-chart2-title">活躍運算時間 (分/每小時)</span>
+            <span class="text-xs text-stone-400">60分滿載基準</span>
+          </div>
+          <div class="relative h-32 border-t border-b border-stone-200 flex items-end justify-between gap-1 pt-3 pb-5 px-1" id="ios-activity-bars">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+
+        <!-- Active vs Idle Time Summary (Matches "螢幕開啟 / 螢幕關閉") -->
+        <div class="grid grid-cols-2 gap-4 pt-1 border-b border-stone-100 pb-4">
+          <div>
+            <div class="text-xs sm:text-sm font-semibold text-sky-600">高負載 / 螢幕活躍</div>
+            <div id="ios-active-total" class="text-lg sm:text-xl font-bold text-stone-900 mt-0.5">11小時 24分鐘</div>
+          </div>
+          <div>
+            <div class="text-xs sm:text-sm font-semibold text-sky-600">背景待命 / 低功耗</div>
+            <div id="ios-idle-total" class="text-lg sm:text-xl font-bold text-stone-900 mt-0.5">12小時 36分鐘</div>
+          </div>
+        </div>
+
+        <!-- Per-App Power Usage List (Matches "依APP分類的電池用量") -->
+        <div>
+          <div class="flex items-center justify-between mb-3">
+            <span class="text-xs sm:text-sm font-semibold text-stone-400" id="app-list-header">依 APP / 處理程序 分類的用電量</span>
+            <button onclick="toggleAppMetricMode()" id="app-metric-toggle" class="text-xs sm:text-sm font-semibold text-sky-600 hover:underline">切換顯示瓦時 (Wh)</button>
+          </div>
+          <div id="ios-app-list" class="divide-y divide-stone-100">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- TAB 4: 歷史查詢與跨平台部署 (Reference Image 1 Tab 3) -->
+    <!-- =================================================================== -->
+    <section id="view-history" class="hidden space-y-4">
+      <div class="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 class="font-bold text-base sm:text-lg text-stone-800">歷史功耗明細與跨平台部署</h2>
+            <p class="text-xs text-stone-500">自動記錄每年 / 每月 / 每日 / 每小時之平均瓦數、峰值瓦數、度數 (kWh) 與電費</p>
+          </div>
+          <button onclick="exportCSV()" class="px-4 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs sm:text-sm font-semibold shadow-sm transition">
+            📥 匯出 CSV 報表
+          </button>
+        </div>
+
+        <!-- Cross-platform deployment guide box -->
+        <div class="bg-stone-50 rounded-xl p-4 border border-stone-200 text-xs sm:text-sm space-y-2">
+          <div class="font-bold text-stone-800">💻 如何在 Windows 桌機/筆電 與 Mac (MacBook / Mac mini) 通用運行？</div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-stone-600">
+            <div class="bg-white p-3 rounded-lg border border-stone-200">
+              <div class="font-semibold text-stone-800 mb-1">🪟 Windows (SUN_PC / Windows 筆電)</div>
+              <code class="block bg-stone-100 p-1.5 rounded text-xs text-stone-800">python server.py</code>
+              <p class="mt-1 text-xs text-stone-500">自動抓取 Intel RAPL 硬體功耗、NVIDIA SMI、Windows 筆電電池 API 與 Powercfg 電源計畫控制。</p>
+            </div>
+            <div class="bg-white p-3 rounded-lg border border-stone-200">
+              <div class="font-semibold text-stone-800 mb-1">🍎 macOS (MacBook 筆電 / Mac mini)</div>
+              <code class="block bg-stone-100 p-1.5 rounded text-xs text-stone-800">python3 server.py</code>
+              <p class="mt-1 text-xs text-stone-500">零第三方依賴！自動呼叫 <code>pmset -g batt</code> 與 <code>AppleSmartBattery</code> 監控筆電電量與行程耗電。</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Historical Log Table -->
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs sm:text-sm">
+            <thead>
+              <tr class="border-b border-stone-200 text-stone-500 bg-stone-50">
+                <th class="py-2.5 px-3">時間區間</th>
+                <th class="py-2.5 px-3">平均功耗 (W)</th>
+                <th class="py-2.5 px-3">峰值功耗 (W)</th>
+                <th class="py-2.5 px-3">CPU / GPU (W)</th>
+                <th class="py-2.5 px-3">耗電量 (度 kWh)</th>
+                <th class="py-2.5 px-3">預估電費 (NT$)</th>
+              </tr>
+            </thead>
+            <tbody id="history-table-body" class="divide-y divide-stone-100">
+              <!-- Populated by JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    // =========================================================================
+    // Default Real Baseline Data from SUN_PC + Cross-Platform Profiles
+    // =========================================================================
+    let currentTab = 'overview';
+    let currentGranularity = 'year'; // 'year' | 'month' | 'day' | 'hour'
+    let selectedBarIndex = -1;
+    let batteryRange = '24h'; // '24h' | '10d'
+    let showAppWh = false;
+    let currentNode = 'sun_pc';
+
+    const NODE_PROFILES = {
+      sun_pc: {
+        hostname: "SUN_PC (Windows 11 算力主機)",
+        is_laptop: false,
+        power_mode_name: "平衡模式 (Balanced)",
+        ambient_temp_c: 28,
+        dc_total_w: 61.5,
+        ac_total_w: 71.5,
+        battery: { present: false, percent: 100, charging: true, status_text: "AC 市電直連 (PSU 86% 效率)", last_full_charge: "AC 常駐供電 · 80Plus Gold" },
+        components: {
+          cpu: { name: "CPU 處理器 (Ultra 7 265K)", power_w: 25.4, temp_c: 42, status: "on", sub: "20核心 · RAPL 實測 (PP0 16.0W + Uncore 9.4W)" },
+          gpu: { name: "GPU 顯示卡 (RTX 5060 Ti 16G)", power_w: 5.2, temp_c: 34, status: "on", sub: "P8 省電待命 · 風扇 0% · 上限 171W" },
+          ram: { name: "記憶體 (64GB DDR5-5600)", power_w: 6.4, temp_c: 33, status: "on", sub: "4×16GB Crucial @ 1.1V · 已用 24.2 GB (38%)" },
+          disk: { name: "儲存陣列 (2×NVMe + 7×SATA)", power_w: 5.7, temp_c: 35, status: "on", sub: "T500 2TB + XPG 1TB + 7顆 SATA 硬碟" },
+          mb_vrm_fan: { name: "主機板與散熱 (Z890 WIFI7)", power_w: 18.8, temp_c: 28, status: "on", sub: "PCH 4.5W + 周邊 7.5W + VRM損耗 2.3W + 風扇 4.5W" },
+          strata: { name: "Strata 極限引擎 (Qwen3.8)", power_w: 0.0, temp_c: 28, status: "off", sub: "已關閉 (開啟推論時約 +185W)" }
+        }
+      },
+      win_laptop: {
+        hostname: "Windows 筆電 (電池/AC 雙模)",
+        is_laptop: true,
+        power_mode_name: "最佳電源效率 (Battery Saver)",
+        ambient_temp_c: 36,
+        dc_total_w: 16.8,
+        ac_total_w: 18.5,
+        battery: { present: true, percent: 78, charging: false, status_text: "電池放電中 (78% · 預估剩餘 4小時12分)", last_full_charge: "今日 上午 07:40 充電至 100%" },
+        components: {
+          cpu: { name: "行動版處理器 (Core Ultra 7)", power_w: 8.5, temp_c: 45, status: "on", sub: "低功耗 P-State 運作中" },
+          gpu: { name: "內顯 + 獨顯 Optimus 待命", power_w: 1.8, temp_c: 39, status: "on", sub: "獨顯休眠中 · 內顯負責螢幕輸出" },
+          ram: { name: "LPDDR5x 32GB 記憶體", power_w: 1.9, temp_c: 37, status: "on", sub: "已用 14.2 GB (44%)" },
+          disk: { name: "NVMe PCIe 4.0 SSD 1TB", power_w: 0.9, temp_c: 36, status: "on", sub: "APST 省電開啟" },
+          mb_vrm_fan: { name: "筆電螢幕 (14吋 OLED) + 主機板", power_w: 5.4, temp_c: 34, status: "on", sub: "螢幕亮度 60% (3.6W) + WiFi 7 (1.8W)" },
+          strata: { name: "遠端連線 SUN_PC 算力API", power_w: 0.0, temp_c: 30, status: "off", sub: "本地零算力負載" }
+        }
+      },
+      mac_mini: {
+        hostname: "Mac mini Gateway (Apple M系列)",
+        is_laptop: false,
+        power_mode_name: "macOS 自動能源管理",
+        ambient_temp_c: 31,
+        dc_total_w: 10.8,
+        ac_total_w: 12.2,
+        battery: { present: false, percent: 100, charging: true, status_text: "AC 市電常駐 (極致低功耗 Gateway)", last_full_charge: "全年 24H 待命僅約 10~15W" },
+        components: {
+          cpu: { name: "Apple Silicon SoC (CPU+GPU+ANE)", power_w: 4.8, temp_c: 35, status: "on", sub: "E-Cores 處理 Gateway 轉發與 SSH 排程" },
+          gpu: { name: "Apple 整合式 GPU 核心", power_w: 0.6, temp_c: 33, status: "on", sub: "Headless 無螢幕超低功耗狀態" },
+          ram: { name: "Unified Memory 統一記憶體", power_w: 1.6, temp_c: 32, status: "on", sub: "SoC 封裝內建低功耗通道" },
+          disk: { name: "Apple 內建快閃儲存 SSD", power_w: 0.8, temp_c: 31, status: "on", sub: "待命讀寫極低耗電" },
+          mb_vrm_fan: { name: "Gigabit 乙太網路 + Wi-Fi + 靜音風扇", power_w: 4.4, temp_c: 30, status: "on", sub: "全天候 Gateway 路由連線" },
+          strata: { name: "遠端調度 SUN_PC (192.168.0.16)", power_w: 0.0, temp_c: 30, status: "on", sub: "SSH / API 閘道連線就緒" }
+        }
+      },
+      macbook: {
+        hostname: "MacBook Pro (macOS 筆電)",
+        is_laptop: true,
+        power_mode_name: "低耗電模式 (Low Power Mode)",
+        ambient_temp_c: 34,
+        dc_total_w: 11.4,
+        ac_total_w: 12.5,
+        battery: { present: true, percent: 84, charging: false, status_text: "電池供電中 (84% · 預估續航 9小時30分)", last_full_charge: "週四 下午 11:20 充電至 100%" },
+        components: {
+          cpu: { name: "Apple M系列 Pro 晶片", power_w: 4.2, temp_c: 38, status: "on", sub: "能效核心為主 · 功耗極低" },
+          gpu: { name: "Apple Metal 圖形核心", power_w: 1.1, temp_c: 36, status: "on", sub: "ProMotion 動態更新率省電中" },
+          ram: { name: "Unified Memory 統一記憶體", power_w: 1.5, temp_c: 35, status: "on", sub: "記憶體壓縮最佳化" },
+          disk: { name: "Apple NVMe 儲存裝置", power_w: 0.6, temp_c: 33, status: "on", sub: "休眠待命" },
+          mb_vrm_fan: { name: "Liquid Retina XDR 顯示器 + 無線", power_w: 5.1, temp_c: 32, status: "on", sub: "風扇 0 RPM 完全停轉" },
+          strata: { name: "Claude / Codex 遠端連線", power_w: 0.0, temp_c: 32, status: "on", sub: "連往 SUN_PC:8080" }
+        }
+      }
+    };
+
+    let appState = {
+      tariff: 4.5,
+      live: JSON.parse(JSON.stringify(NODE_PROFILES.sun_pc)),
+      top_apps: [
+        { name: "Windows 音訊引擎 (audiodg)", category: "系統多媒體", icon: "🔊", share_pct: 36.2, est_wh: 25.9 },
+        { name: "Google Chrome 瀏覽器", category: "網頁與多媒體", icon: "🌐", share_pct: 22.8, est_wh: 16.3 },
+        { name: "WPS Office 辦公套件", category: "生產力工具", icon: "📄", share_pct: 11.4, est_wh: 8.2 },
+        { name: "Parsec 遠端桌面串流", category: "遠端連線與編碼", icon: "🖥️", share_pct: 9.8, est_wh: 7.0 },
+        { name: "Windows 檔案總管 (Explorer)", category: "系統核心介面", icon: "📁", share_pct: 6.9, est_wh: 4.9 },
+        { name: "GIGABYTE Control Center", category: "硬體感測與風扇", icon: "⚙️", share_pct: 5.2, est_wh: 3.7 },
+        { name: "Python (AI ASR 語音服務)", category: "AI 與開發工具", icon: "🐍", share_pct: 4.3, est_wh: 3.1 },
+        { name: "NVIDIA 背景容器服務", category: "顯示卡服務", icon: "🟢", share_pct: 3.4, est_wh: 2.4 }
+      ],
+      history: {
+        yearly_bars: [
+          { label: "12月", period: "2025/12", prev_kwh: 46.2, current_kwh: 49.8, avg_w: 69.2 },
+          { label: "01月", period: "2026/01", prev_kwh: 44.5, current_kwh: 48.1, avg_w: 66.8 },
+          { label: "02月", period: "2026/02", prev_kwh: 39.8, current_kwh: 43.2, avg_w: 64.3 },
+          { label: "03月", period: "2026/03", prev_kwh: 45.0, current_kwh: 50.4, avg_w: 70.0 },
+          { label: "04月", period: "2026/04", prev_kwh: 48.2, current_kwh: 53.6, avg_w: 74.4 },
+          { label: "05月", period: "2026/05", prev_kwh: 55.4, current_kwh: 61.2, avg_w: 85.0 },
+          { label: "06月", period: "2026/06", prev_kwh: 64.1, current_kwh: 72.5, avg_w: 100.7 },
+          { label: "07月", period: "2026/07", prev_kwh: 68.5, current_kwh: 76.8, avg_w: 106.7 },
+          { label: "08月", period: "2026/08", prev_kwh: 67.2, current_kwh: 74.1, avg_w: 102.9 },
+          { label: "09月", period: "2026/09", prev_kwh: 58.9, current_kwh: 63.4, avg_w: 88.1 },
+          { label: "10月", period: "2026/10", prev_kwh: 52.3, current_kwh: 58.9, avg_w: 81.8 },
+          { label: "11月", period: "2026/11", prev_kwh: 47.8, current_kwh: 51.5, avg_w: 71.5 }
+        ],
+        daily_bars: [
+          { label: "10/24", period: "2026-10-24", prev_kwh: 1.95, current_kwh: 2.18, avg_w: 90.8, peak_w: 245.0 },
+          { label: "10/25", period: "2026-10-25", prev_kwh: 2.10, current_kwh: 2.34, avg_w: 97.5, peak_w: 280.0 },
+          { label: "10/26", period: "2026-10-26", prev_kwh: 1.60, current_kwh: 1.75, avg_w: 72.9, peak_w: 165.0 },
+          { label: "10/27", period: "2026-10-27", prev_kwh: 1.55, current_kwh: 1.68, avg_w: 70.0, peak_w: 140.0 },
+          { label: "10/28", period: "2026-10-28", prev_kwh: 1.72, current_kwh: 1.89, avg_w: 78.8, peak_w: 195.0 },
+          { label: "10/29", period: "2026-10-29", prev_kwh: 1.68, current_kwh: 1.82, avg_w: 75.8, peak_w: 180.0 },
+          { label: "10/30", period: "2026-10-30", prev_kwh: 1.75, current_kwh: 1.94, avg_w: 80.8, peak_w: 210.0 },
+          { label: "10/31", period: "2026-10-31", prev_kwh: 2.05, current_kwh: 2.42, avg_w: 100.8, peak_w: 310.0 },
+          { label: "11/01", period: "2026-11-01", prev_kwh: 2.15, current_kwh: 2.51, avg_w: 104.6, peak_w: 325.0 },
+          { label: "11/02", period: "2026-11-02", prev_kwh: 1.64, current_kwh: 1.76, avg_w: 73.3, peak_w: 155.0 },
+          { label: "11/03", period: "2026-11-03", prev_kwh: 1.58, current_kwh: 1.71, avg_w: 71.3, peak_w: 148.0 },
+          { label: "11/04", period: "2026-11-04", prev_kwh: 1.62, current_kwh: 1.79, avg_w: 74.6, peak_w: 175.0 },
+          { label: "11/05", period: "2026-11-05", prev_kwh: 1.70, current_kwh: 1.85, avg_w: 77.1, peak_w: 190.0 },
+          { label: "11/06", period: "2026-11-06", prev_kwh: 1.60, current_kwh: 1.72, avg_w: 71.5, peak_w: 142.0 }
+        ],
+        hourly_bars: []
+      }
+    };
+
+    // Populate default 24h bars
+    (function initDefaultHourly() {
+      const hrs = [];
+      for (let i = 0; i < 24; i++) {
+        const hStr = String(i).padStart(2, '0') + ":00";
+        let w = 56.0;
+        let act = 12;
+        let bat = 95;
+        let chg = true;
+        if (i >= 8 && i <= 18) {
+          w = 71.5 + ((i * 7) % 28);
+          act = 35 + ((i * 5) % 20);
+          bat = Math.max(58, 96 - (i - 7) * 3);
+          chg = (i % 3 !== 0);
+        } else if (i >= 19 && i <= 23) {
+          w = 128.0 + ((i * 19) % 95);
+          act = 48 + (i % 11);
+          bat = Math.min(100, 68 + (i - 18) * 6);
+          chg = true;
+        } else {
+          w = 52.0 + (i * 2.5);
+          act = 8 + (i % 7);
+          bat = 100 - i * 2;
+          chg = (i <= 4);
+        }
+        hrs.push({
+          label: String(i).padStart(2, '0'),
+          period: `今日 ${hStr}`,
+          watts: Number(w.toFixed(1)),
+          peak_w: Number((w * 1.38).toFixed(1)),
+          current_kwh: Number((w / 1000).toFixed(3)),
+          prev_kwh: Number(((w * 0.9) / 1000).toFixed(3)),
+          cpu_w: Number((w * 0.38).toFixed(1)),
+          gpu_w: Number((w * 0.25).toFixed(1)),
+          other_w: Number((w * 0.37).toFixed(1)),
+          battery_pct: bat,
+          charging: chg,
+          active_mins: act,
+          idle_mins: 60 - act
+        });
+      }
+      appState.history.hourly_bars = hrs;
+    })();
+
+    const API_BASE = window.location.protocol.startsWith('http') ? '' : 'http://127.0.0.1:8095';
+
+    // Try fetching live telemetry from local Python backend (if running)
+    async function fetchLiveBackend() {
+      if (currentNode !== 'sun_pc') return;
+      try {
+        const res = await fetch(API_BASE + '/api/dashboard');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.live) {
+            appState.tariff = data.live.tariff_ntd_per_kwh || appState.tariff;
+            appState.live.ac_total_w = data.live.ac_total_w;
+            appState.live.dc_total_w = data.live.dc_total_w;
+            appState.live.power_mode_name = data.live.power_mode_name;
+            if (data.live.top_apps && data.live.top_apps.length > 0) {
+              appState.top_apps = data.live.top_apps;
+            }
+          }
+          renderAll();
+        }
+      } catch (e) {
+        // Fallback to embedded snapshot seamlessly when viewed offline/artifact
+      }
+    }
+
+    function switchNodeProfile(nodeKey) {
+      currentNode = nodeKey;
+      const prof = NODE_PROFILES[nodeKey] || NODE_PROFILES.sun_pc;
+      appState.live = JSON.parse(JSON.stringify(prof));
+      // Scale chart values proportionally to node wattage ratio
+      const scale = prof.ac_total_w / 71.5;
+      renderAll(scale);
+    }
+
+    function switchMainTab(tab) {
+      currentTab = tab;
+      ['overview', 'devices', 'battery', 'history'].forEach(t => {
+        const btn = document.getElementById('tab-' + t);
+        const sec = document.getElementById('view-' + t);
+        if (t === tab) {
+          btn.className = 'tab-btn-active flex items-center justify-center gap-2 py-3 px-3 rounded-2xl border border-stone-200 shadow-sm transition';
+          sec.classList.remove('hidden');
+        } else {
+          btn.className = 'tab-btn-inactive flex items-center justify-center gap-2 py-3 px-3 rounded-2xl border border-stone-200 shadow-sm transition';
+          sec.classList.add('hidden');
+        }
+      });
+      renderAll();
+    }
+
+    function setGranularity(g) {
+      currentGranularity = g;
+      selectedBarIndex = -1;
+      ['year', 'month', 'day', 'hour'].forEach(k => {
+        const b = document.getElementById('gran-' + k);
+        b.className = (k === g)
+          ? 'pill-active px-4 py-2 rounded-xl border border-stone-200 shadow-sm text-sm transition'
+          : 'pill-inactive px-4 py-2 rounded-xl border border-stone-200 shadow-sm text-sm transition';
+      });
+      renderOverviewChart();
+    }
+
+    function selectBar(idx) {
+      selectedBarIndex = idx;
+      renderOverviewChart();
+    }
+
+    function renderOverviewChart(scaleFactor = null) {
+      const prof = NODE_PROFILES[currentNode] || NODE_PROFILES.sun_pc;
+      const scale = scaleFactor !== null ? scaleFactor : (prof.ac_total_w / 71.5);
+      const metric = document.getElementById('metric-selector').value; // 'kwh' | 'watts' | 'cost'
+      const tariff = appState.tariff;
+
+      document.getElementById('overview-live-watts').textContent = `${prof.ac_total_w.toFixed(1)} W`;
+      document.getElementById('overview-dc-watts').textContent = `${prof.dc_total_w.toFixed(1)} W`;
+
+      let rawItems = [];
+      if (currentGranularity === 'year') {
+        rawItems = appState.history.yearly_bars;
+        document.getElementById('legend-prev').textContent = '去年同期';
+        document.getElementById('legend-curr').textContent = '今年當期';
+        document.getElementById('summary-title-1').textContent = '近12月累計用電量';
+      } else if (currentGranularity === 'month') {
+        rawItems = appState.history.daily_bars;
+        document.getElementById('legend-prev').textContent = '上月同期';
+        document.getElementById('legend-curr').textContent = '本月每日';
+        document.getElementById('summary-title-1').textContent = '近30日累計用電量';
+      } else if (currentGranularity === 'day') {
+        rawItems = appState.history.daily_bars.slice(-7);
+        document.getElementById('legend-prev').textContent = '上週同日';
+        document.getElementById('legend-curr').textContent = '本週每日';
+        document.getElementById('summary-title-1').textContent = '近7日累計用電量';
+      } else {
+        rawItems = appState.history.hourly_bars;
+        document.getElementById('legend-prev').textContent = '昨日同刻';
+        document.getElementById('legend-curr').textContent = '今日每時';
+        document.getElementById('summary-title-1').textContent = '過去24小時總用電量';
+      }
+
+      if (selectedBarIndex < 0 || selectedBarIndex >= rawItems.length) {
+        selectedBarIndex = rawItems.length - 1;
+      }
+
+      // Compute display values for each bar
+      const mapped = rawItems.map((item, idx) => {
+        let val = 0;
+        let unit = '度';
+        if (metric === 'kwh') {
+          if (currentGranularity === 'hour') {
+            val = Number((item.watts * scale).toFixed(1));
+            unit = 'Wh';
+          } else {
+            val = Number((item.current_kwh * scale).toFixed(2));
+            unit = '度';
+          }
+        } else if (metric === 'watts') {
+          val = Number(((item.avg_w || item.watts || 71.5) * scale).toFixed(1));
+          unit = 'W';
+        } else {
+          const kwh = (currentGranularity === 'hour') ? ((item.watts * scale) / 1000.0) : (item.current_kwh * scale);
+          val = Number((kwh * tariff).toFixed(1));
+          unit = '元';
+        }
+        return { ...item, displayVal: val, unit };
+      });
+
+      const maxVal = Math.max(...mapped.map(m => m.displayVal), 1) * 1.18;
+      document.getElementById('y-max-label').textContent = Math.round(maxVal);
+      document.getElementById('y-mid2-label').textContent = Math.round(maxVal * 0.66);
+      document.getElementById('y-mid1-label').textContent = Math.round(maxVal * 0.33);
+      document.getElementById('chart-unit-label').textContent = mapped[0]?.unit || '度';
+
+      const sel = mapped[selectedBarIndex] || mapped[mapped.length - 1];
+      document.getElementById('callout-period').textContent = sel.period;
+      document.getElementById('callout-value').textContent = `${sel.displayVal} ${sel.unit}`;
+
+      const container = document.getElementById('overview-bars-container');
+      // Keep the 3 grid lines and rebuild bars
+      const gridHTML = `
+        <div class="absolute inset-x-0 top-6 border-t border-stone-200 pointer-events-none flex items-center">
+          <span class="text-xs text-stone-400 -mt-5 pl-1">${Math.round(maxVal)}</span>
+        </div>
+        <div class="absolute inset-x-0 top-1/3 border-t border-stone-200 pointer-events-none flex items-center">
+          <span class="text-xs text-stone-400 -mt-5 pl-1">${Math.round(maxVal * 0.66)}</span>
+        </div>
+        <div class="absolute inset-x-0 top-2/3 border-t border-stone-200 pointer-events-none flex items-center">
+          <span class="text-xs text-stone-400 -mt-5 pl-1">${Math.round(maxVal * 0.33)}</span>
+        </div>
+      `;
+
+      const barsHTML = mapped.map((bar, i) => {
+        const pct = Math.max(6, Math.min(96, Math.round((bar.displayVal / maxVal) * 100)));
+        const isSelected = (i === selectedBarIndex);
+        const barColor = isSelected ? '#00699e' : '#38a3dc';
+        return `
+          <div onclick="selectBar(${i})" class="relative flex-1 h-full flex flex-col justify-end items-center cursor-pointer group z-10">
+            ${isSelected ? `<div class="absolute inset-y-0 border-l-2 border-dashed border-stone-600 pointer-events-none" style="bottom:${pct}%;"></div>` : ''}
+            <div class="w-full max-w-[26px] rounded-t-sm bar-transition group-hover:opacity-85" style="height:${pct}%; background-color:${barColor};"></div>
+            <span class="absolute -bottom-6 text-xs ${isSelected ? 'font-extrabold text-stone-900' : 'text-stone-500'}">${bar.label.replace('月','')}</span>
+          </div>
+        `;
+      }).join('');
+
+      container.innerHTML = gridHTML + barsHTML;
+
+      // Update Bottom Summary Cards
+      let sumKwh = 0;
+      if (currentGranularity === 'year') {
+        sumKwh = rawItems.reduce((acc, r) => acc + r.current_kwh * scale, 0);
+      } else if (currentGranularity === 'month') {
+        sumKwh = rawItems.reduce((acc, r) => acc + r.current_kwh * scale, 0) * (30 / rawItems.length);
+      } else if (currentGranularity === 'day') {
+        sumKwh = rawItems.reduce((acc, r) => acc + r.current_kwh * scale, 0);
+      } else {
+        sumKwh = rawItems.reduce((acc, r) => acc + (r.watts * scale) / 1000.0, 0);
+      }
+
+      const estCost = Math.round(sumKwh * tariff);
+      document.getElementById('summary-val-1').textContent = `${sumKwh.toFixed(2)} 度 (kWh)`;
+      document.getElementById('summary-sub-1').textContent = `即時功率 ${prof.ac_total_w.toFixed(1)} W · 每日約 ${(prof.ac_total_w * 24 / 1000).toFixed(2)} 度`;
+      document.getElementById('summary-val-2').textContent = `NT$ ${estCost.toLocaleString()}`;
+      document.getElementById('summary-sub-2').textContent = `目前單價：NT$ ${tariff.toFixed(2)} / 度 (點擊右上角「✎ 單價」可調整)`;
+    }
+
+    function renderDeviceCards() {
+      const prof = NODE_PROFILES[currentNode] || NODE_PROFILES.sun_pc;
+      document.getElementById('dev-host-title').textContent = prof.hostname;
+      document.getElementById('dev-power-scheme').textContent = prof.power_mode_name;
+      document.getElementById('dev-battery-banner').textContent = prof.battery.status_text;
+      document.getElementById('banner-mb-temp').textContent = prof.ambient_temp_c;
+      document.getElementById('banner-ac-watts').textContent = prof.ac_total_w.toFixed(1);
+
+      const comps = prof.components;
+      const items = [
+        { key: 'cpu', icon: '🧠', ...comps.cpu, actionLabel: '切換平衡/省電' },
+        { key: 'gpu', icon: '🎮', ...comps.gpu, actionLabel: '調整功耗牆 (171W)' },
+        { key: 'ram', icon: '⚡', ...comps.ram, actionLabel: '1.1V JEDEC 運行' },
+        { key: 'disk', icon: '💾', ...comps.disk, actionLabel: 'SMART 狀態良好' },
+        { key: 'mb_vrm_fan', icon: '🌡️', ...comps.mb_vrm_fan, actionLabel: '智慧風扇曲線' },
+        { key: 'strata', icon: '🚀', ...comps.strata, actionLabel: '切換啟停狀態' }
+      ];
+
+      const grid = document.getElementById('device-cards-grid');
+      grid.innerHTML = items.map(item => {
+        const isOn = item.status === 'on';
+        const btnBg = isOn ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-rose-50 text-rose-500 border-rose-200';
+        return `
+          <div class="bg-white rounded-2xl border border-stone-200 p-4 sm:p-5 shadow-sm flex flex-col justify-between hover:border-stone-300 transition">
+            <div class="flex items-start justify-between gap-2 mb-3">
+              <div class="w-11 h-11 rounded-xl bg-stone-100 border border-stone-200 flex items-center justify-center text-2xl">
+                ${item.icon}
+              </div>
+              <button onclick="toggleDeviceCard('${item.key}')" title="${item.actionLabel}" class="w-9 h-9 rounded-full border ${btnBg} flex items-center justify-center font-bold text-base shadow-sm hover:scale-105 transition">
+                ⏻
+              </button>
+            </div>
+            <div>
+              <div class="font-bold text-stone-800 text-sm sm:text-base flex items-center justify-between">
+                <span>${item.name}</span>
+                <span class="text-teal-700 font-extrabold">${item.power_w.toFixed(1)} W</span>
+              </div>
+              <div class="text-xs sm:text-sm text-stone-500 mt-1">
+                運作溫度 <strong class="text-stone-700">${item.temp_c} °C</strong>
+              </div>
+              <div class="text-xs text-stone-400 mt-1 truncate">${item.sub}</div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function toggleDeviceCard(key) {
+      const prof = NODE_PROFILES[currentNode];
+      if (!prof || !prof.components[key]) return;
+      const comp = prof.components[key];
+      if (key === 'strata') {
+        if (comp.status === 'on') {
+          comp.status = 'off';
+          comp.power_w = 0.0;
+          comp.sub = '已關閉 (瞬間釋放 39GB RAM 與 185W 功耗)';
+          prof.ac_total_w = Math.max(12.0, Number((prof.ac_total_w - 185.0).toFixed(1)));
+          prof.dc_total_w = Math.max(10.0, Number((prof.dc_total_w - 165.0).toFixed(1)));
+          sendControl('toggle_strata', 'off');
+        } else {
+          comp.status = 'on';
+          comp.power_w = 185.0;
+          comp.sub = '高負載推論預覽中 (CPU 145W + GPU 40W)';
+          prof.ac_total_w = Number((prof.ac_total_w + 185.0).toFixed(1));
+          prof.dc_total_w = Number((prof.dc_total_w + 165.0).toFixed(1));
+        }
+      } else if (key === 'gpu') {
+        const nextPl = prompt('請輸入 RTX 5060 Ti 功耗上限 (162 ~ 206 W)：', '171');
+        if (nextPl) sendControl('set_gpu_pl', nextPl);
+      }
+      renderAll();
+    }
+
+    function setBatteryRange(range) {
+      batteryRange = range;
+      document.getElementById('bat-seg-24h').className = (range === '24h')
+        ? 'ios-seg-active py-1.5 rounded-lg text-xs sm:text-sm transition'
+        : 'text-stone-600 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition';
+      document.getElementById('bat-seg-10d').className = (range === '10d')
+        ? 'ios-seg-active py-1.5 rounded-lg text-xs sm:text-sm transition'
+        : 'text-stone-600 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition';
+      renderBatteryTab();
+    }
+
+    function toggleAppMetricMode() {
+      showAppWh = !showAppWh;
+      document.getElementById('app-metric-toggle').textContent = showAppWh ? '切換顯示百分比 (%)' : '切換顯示瓦時 (Wh)';
+      renderBatteryTab();
+    }
+
+    function renderBatteryTab() {
+      const prof = NODE_PROFILES[currentNode] || NODE_PROFILES.sun_pc;
+      const scale = prof.ac_total_w / 71.5;
+
+      document.getElementById('bat-status-headline').textContent = prof.battery.status_text;
+      document.getElementById('bat-status-sub').textContent = prof.battery.last_full_charge;
+      document.getElementById('bat-live-watts').textContent = `${prof.ac_total_w.toFixed(1)} W`;
+
+      const batContainer = document.getElementById('ios-battery-bars');
+      const actContainer = document.getElementById('ios-activity-bars');
+
+      if (batteryRange === '24h') {
+        const hrs = appState.history.hourly_bars;
+        batContainer.innerHTML = hrs.map((h, i) => {
+          const pct = prof.is_laptop ? h.battery_pct : Math.min(100, Math.max(25, Math.round((h.watts / 180) * 100)));
+          const showLabel = (i % 3 === 0);
+          return `
+            <div class="flex-1 h-full flex flex-col justify-end items-center relative group">
+              <div class="w-full rounded-t-sm bg-emerald-500 bar-transition" style="height:${pct}%;" title="${h.period}: ${prof.is_laptop ? h.battery_pct + '%' : (h.watts * scale).toFixed(1) + 'W'}"></div>
+              ${h.charging ? `<div class="w-full h-1.5 bg-emerald-600 mt-0.5 rounded-xs"></div>` : `<div class="w-full h-1.5 bg-transparent mt-0.5"></div>`}
+              ${showLabel ? `<span class="absolute -bottom-4 text-xs text-stone-400">${h.label}</span>` : ''}
+            </div>
+          `;
+        }).join('');
+
+        actContainer.innerHTML = hrs.map((h, i) => {
+          const actPct = Math.min(100, Math.round((h.active_mins / 60) * 100));
+          const showLabel = (i % 3 === 0);
+          return `
+            <div class="flex-1 h-full flex flex-col justify-end items-center relative">
+              <div class="w-full rounded-t-sm bg-sky-500 bar-transition" style="height:${actPct}%;" title="${h.period}: 活躍 ${h.active_mins} 分鐘"></div>
+              ${showLabel ? `<span class="absolute -bottom-4 text-xs text-stone-400">${h.label}</span>` : ''}
+            </div>
+          `;
+        }).join('');
+      } else {
+        const days = appState.history.daily_bars.slice(-10);
+        batContainer.innerHTML = days.map(d => {
+          const pct = Math.min(100, Math.round((d.current_kwh / 3.0) * 100));
+          return `
+            <div class="flex-1 h-full flex flex-col justify-end items-center relative">
+              <div class="w-4/5 rounded-t-sm bg-emerald-500 bar-transition" style="height:${pct}%;" title="${d.period}: ${(d.current_kwh * scale).toFixed(2)} 度"></div>
+              <span class="absolute -bottom-4 text-xs text-stone-400">${d.label}</span>
+            </div>
+          `;
+        }).join('');
+
+        actContainer.innerHTML = days.map((d, idx) => {
+          const actPct = 55 + ((idx * 13) % 35);
+          return `
+            <div class="flex-1 h-full flex flex-col justify-end items-center relative">
+              <div class="w-4/5 rounded-t-sm bg-sky-500 bar-transition" style="height:${actPct}%;"></div>
+              <span class="absolute -bottom-4 text-xs text-stone-400">${d.label}</span>
+            </div>
+          `;
+        }).join('');
+      }
+
+      // Render App Energy Breakdown List
+      const appList = document.getElementById('ios-app-list');
+      appList.innerHTML = appState.top_apps.map(app => {
+        const valText = showAppWh
+          ? `${(app.est_wh * scale).toFixed(1)} Wh`
+          : `${app.share_pct.toFixed(0)}%`;
+        return `
+          <div class="py-3 flex items-center justify-between gap-3">
+            <div class="flex items-center gap-3 min-w-0">
+              <div class="w-10 h-10 rounded-xl bg-stone-100 border border-stone-200 flex items-center justify-center text-xl shrink-0">
+                ${app.icon}
+              </div>
+              <div class="min-w-0">
+                <div class="font-bold text-stone-800 text-sm sm:text-base truncate">${app.name}</div>
+                <div class="text-xs text-stone-400">${app.category}</div>
+                <div class="w-36 sm:w-56 h-1.5 bg-stone-100 rounded-full mt-1 overflow-hidden">
+                  <div class="h-full bg-sky-500 rounded-full" style="width:${Math.min(100, app.share_pct)}%;"></div>
+                </div>
+              </div>
+            </div>
+            <div class="text-base sm:text-lg font-bold text-stone-500 shrink-0">${valText}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderHistoryTable() {
+      const prof = NODE_PROFILES[currentNode] || NODE_PROFILES.sun_pc;
+      const scale = prof.ac_total_w / 71.5;
+      const tbody = document.getElementById('history-table-body');
+      const rows = appState.history.daily_bars.slice().reverse();
+      tbody.innerHTML = rows.map(r => {
+        const w = (r.avg_w * scale).toFixed(1);
+        const pk = (r.peak_w * scale).toFixed(1);
+        const cpuGpu = `${(r.avg_w * scale * 0.41).toFixed(1)}W / ${(r.avg_w * scale * 0.18).toFixed(1)}W`;
+        const kwh = (r.current_kwh * scale).toFixed(2);
+        const cost = (r.current_kwh * scale * appState.tariff).toFixed(1);
+        return `
+          <tr class="hover:bg-stone-50">
+            <td class="py-2.5 px-3 font-semibold text-stone-800">${r.period}</td>
+            <td class="py-2.5 px-3 text-teal-700 font-bold">${w} W</td>
+            <td class="py-2.5 px-3 text-amber-700">${pk} W</td>
+            <td class="py-2.5 px-3 text-stone-500">${cpuGpu}</td>
+            <td class="py-2.5 px-3 font-semibold">${kwh} 度</td>
+            <td class="py-2.5 px-3 font-bold text-stone-800">NT$ ${cost}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function sendControl(action, value) {
+      const fb = document.getElementById('control-feedback');
+      if (fb) fb.textContent = '正在套用硬體電源指令...';
+      try {
+        const res = await fetch(API_BASE + '/api/control', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action, value })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (fb) fb.textContent = '✅ ' + data.message;
+          fetchLiveBackend();
+          return;
+        }
+      } catch (e) {}
+
+      // Local interactive feedback when previewing offline
+      if (action === 'set_power_mode') {
+        const modeMap = {
+          eco: { name: '省電靜音模式 (Power Saver)', w: 54.2 },
+          balanced: { name: '平衡模式 (Balanced)', w: 71.5 },
+          performance: { name: '高效能算力模式 (High Perf)', w: 92.8 }
+        };
+        if (modeMap[value]) {
+          NODE_PROFILES[currentNode].power_mode_name = modeMap[value].name;
+          NODE_PROFILES[currentNode].ac_total_w = modeMap[value].w;
+          NODE_PROFILES[currentNode].dc_total_w = Number((modeMap[value].w * 0.86).toFixed(1));
+          if (fb) fb.textContent = `✅ 已切換至：${modeMap[value].name}`;
+        }
+      } else if (action === 'unload_ollama') {
+        if (fb) fb.textContent = '✅ 已釋放閒置 AI 模型顯存與背景負載';
+      }
+      renderAll();
+    }
+
+    function promptTariff() {
+      const val = prompt('請設定每度電 (kWh) 單價 (新台幣 NT$)：', String(appState.tariff));
+      if (val && !isNaN(parseFloat(val))) {
+        appState.tariff = parseFloat(val);
+        sendControl('set_tariff', appState.tariff);
+        renderAll();
+      }
+    }
+
+    function exportCSV() {
+      const rows = [['日期', '平均功耗(W)', '峰值功耗(W)', '累積用電(度kWh)', '預估電費(NT$)']];
+      appState.history.daily_bars.forEach(r => {
+        rows.push([r.period, r.avg_w, r.peak_w, r.current_kwh, (r.current_kwh * appState.tariff).toFixed(1)]);
+      });
+      const csv = '\uFEFF' + rows.map(e => e.join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `power_report_${currentNode}.csv`;
+      a.click();
+    }
+
+    function renderAll(scaleFactor = null) {
+      renderOverviewChart(scaleFactor);
+      renderDeviceCards();
+      renderBatteryTab();
+      renderHistoryTable();
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      renderAll();
+      fetchLiveBackend();
+      setInterval(fetchLiveBackend, 10000);
+    });
+  </script>
+</body>
+</html>
