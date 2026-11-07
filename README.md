@@ -1,118 +1,73 @@
-# UniPowerGuard ⚡ — 跨平台電腦與筆電電源管控中心 (Cross-Platform Power & Battery Manager)
+# UniPowerGuard ⚡ — 實測感測器電源管控與雲端 SQL 系統
 
-[![GitHub Pages](https://img.shields.io/badge/Demo-GitHub%20Pages-2ea44f?style=flat-square&logo=github)](https://zhijaysun0915.github.io/UniPowerGuard/)
-[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS-blue?style=flat-square)](https://github.com/zhijaysun0915/UniPowerGuard)
-[![License](https://img.shields.io/badge/License-MIT-orange?style=flat-square)](LICENSE)
-[![Zero Dependency](https://img.shields.io/badge/Dependencies-Zero%20(Python%20Stdlib)-brightgreen?style=flat-square)](https://github.com/zhijaysun0915/UniPowerGuard)
+[![GitHub Pages](https://img.shields.io/badge/Live%20App-GitHub%20Pages-2ea44f?style=flat-square&logo=github)](https://zhijaysun0915.github.io/UniPowerGuard/)
+[![Cloud SQL](https://img.shields.io/badge/Cloud%20SQL-SQL.js%20WASM%20%2B%20SQLite-00699e?style=flat-square)](https://zhijaysun0915.github.io/UniPowerGuard/)
+[![Real Sensors](https://img.shields.io/badge/Telemetry-100%25%20Real%20Measured-teal?style=flat-square)](https://github.com/zhijaysun0915/UniPowerGuard)
 
-> 🚀 **免安裝直接線上體驗 Live Demo**：[https://zhijaysun0915.github.io/UniPowerGuard/](https://zhijaysun0915.github.io/UniPowerGuard/)  
-> （點擊上方連結即可在瀏覽器直接操作完整 UI、分頁切換、節點模擬與電費試算！）
-
----
-
-## 🌟 簡介 (Overview)
-
-**UniPowerGuard** 是一套專為 **Windows（桌機 / 筆電）** 與 **macOS（MacBook / Mac mini）** 設計的輕量化、通用跨平台電腦電源監控與管控系統。
-
-本專案**零外部套件依賴 (Zero Dependency)**，完全使用 Python 內建標準庫（Standard Library）搭配輕量 SQLite 資料庫與 HTML5 + Tailwind CSS 現代化前端，可自動記錄**每年 / 每月 / 每日 / 每時**之功耗、度數（kWh）與電費，並具備即時硬體電源策略切換功能。
+> 🚀 **免安裝直接線上執行 (不依賴本地後端、內建雲端 SQL 引擎)**：  
+> 👉 **[https://zhijaysun0915.github.io/UniPowerGuard/](https://zhijaysun0915.github.io/UniPowerGuard/)**
 
 ---
 
-## 📱 核心介面特色 (UI Features)
+## 🌟 核心設計原則 (Strict Real Measurement & Cloud SQL)
 
-本系統參考現代主流電力 APP 與行動裝置系統介面進行整合設計：
-
-1. **🔌 用電總覽 (Overview)**
-   * **年 / 月 / 日 / 時** 四種粒度無縫切換。
-   * 柱狀圖對比（前期 vs 當期），點擊任一長條即時顯示虛線導航與精確度數。
-   * 自訂每度電單價（新台幣 NT$），即時試算累計度數與預估電費。
-2. **📋 電腦設備與電源管控 (Devices & Control)**
-   * 頂部即時顯示機殼環境溫度、AC 市電輸入功耗與 DC 直流內部功耗。
-   * **👍 一鍵快速控制**：
-     * 🌿 **省電靜音模式**（Windows 省電方案 + GPU 162W 功耗牆）
-     * ⚖️ **日常平衡模式**（Windows 平衡方案 + GPU 171W 最佳甜蜜點）
-     * 🚀 **AI 算力全開**（Windows 高效能方案 + GPU 180W 滿血釋放）
-     * 🧹 **釋放 AI 顯存**（一鍵卸載本地 Ollama / Strata 避免顯存與待命耗電）
-   * **🏠 硬體組件卡片**：即時顯示 CPU (RAPL)、GPU (NVIDIA)、RAM、SSD/HDD 儲存陣列、主機板與散熱群之個別瓦數與運作狀態。
-3. **🔋 電池與 APP 耗電 (iOS Battery Style)**
-   * 經典 **過去 24 小時 / 過去 10 天** 時間軸切換。
-   * 綠色電量/負載曲線（支援筆電充電狀態指示條）。
-   * 藍色活躍運算時間柱狀圖（滿載 60 分鐘基準）。
-   * **依 APP / 處理程序分類之用電排行榜**：精確計算 Chrome、Office、Parsec、Python AI、Explorer 等程序之耗電佔比（%）與瓦時（Wh）。
-4. **🔍 歷史查詢 (History & Export)**
-   * 詳細紀錄每小時、每日、每月之平均功率、峰值功率、CPU/GPU 分流耗電與度數。
-   * 支援一鍵匯出 **CSV 報表**。
+1. **100% 實際硬體感測器量測值 (`實際量測值`)**：
+   * 絕不回填假造歷史數據，亦不使用規格書公式捏造瓦數。
+   * **有硬體感測器之項目**：直接讀取並記錄實際量測數值（如 Intel RAPL CPU 封裝/核心功率、NVIDIA `nvidia-smi` GPU 功率/溫度/轉速/P-State、ACPI 主機板環境溫度 `_TZ.TZ00`、WMI 記憶體容量與電壓、磁碟容量、`Get-Process` 各程序實際 CPU 秒數與記憶體 MB）。
+   * **無硬體感測器或未開機記錄之項目/時段**：資料庫嚴格儲存為 `NULL`，前端介面統一顯示為 **`--`**（如無智慧插座功率計之 AC 牆壁功耗 `-- W`、無溫度暴露之 CPU 溫度 `-- °C`、無感測器之 RAM/硬碟/主機板獨立瓦數 `-- W`、桌機無電池 `-- %`、尚未量測之歷史月份/日期/小時 `--`）。
+2. **不依賴本地、可完全線上運行 (`Cloud SQL in Browser`)**：
+   * 線上網頁內嵌 **SQL.js (SQLite WebAssembly)** 引擎，開啟網頁時自動從雲端載入 `cloud_db.json` / `power_history.db`，在瀏覽器記憶體中建立完整的 SQLite 關聯式資料表（`hourly_logs`、`sensor_samples`、`app_energy_logs`、`control_logs`）。
+   * 即使完全不開本地 Python 服務，也能在線上直接切換所有分頁、檢視實測數據、並在「🔍 歷史查詢 & 雲端SQL」分頁執行任意標準 `SELECT` SQL 查詢！
 
 ---
 
-## 💻 支援平台與感測器對應 (Cross-Platform Telemetry)
+## 📊 `SUN_PC` 實測感測項目與 `--` 對應一覽表
 
-| 平台類別 | 代表裝置 | 硬體感測器與控制方式 |
+| 設備 / 欄位 | 感測器來源 | 實測狀態与顯示範例 |
 | :--- | :--- | :--- |
-| **Windows 桌機** | `SUN_PC` (Intel Core Ultra 7 265K + RTX 5060 Ti) | • **CPU**：Intel RAPL 硬體暫存器 (`rapl_package0_pkg`)<br>• **GPU**：`nvidia-smi` 即時瓦數、溫度、時脈與 P-State<br>• **控制**：`powercfg /setactive` + `nvidia-smi -pl` 功耗牆限制 |
-| **Windows 筆電** | 各廠牌 Windows 筆電 | • **電池**：Win32_Battery API 取得電池殘量與充放電狀態<br>• 自動偵測 Optimus 獨顯休眠與螢幕背光能耗 |
-| **macOS 筆電** | Apple MacBook Air / MacBook Pro | • 呼叫 `pmset -g batt` 與 `AppleSmartBattery` 讀取充放電週期與電量<br>• 監控系統活躍度與低耗電模式 (Low Power Mode) |
-| **macOS 迷你主機** | Apple Mac mini Gateway / Studio | • 常駐極低功耗模式（10~15W 待命）監控<br>• 支援遠端調度 GPU 算力機與 SSH 關閉算力節點 |
+| **CPU 封裝/核心功耗** | `\Energy Meter(rapl_package0_pkg / pp0)\Power` | ✅ **實測值** (`17.93 W ~ 25.40 W`) |
+| **CPU 負載率 & 時脈** | `\Processor(_Total)\% Processor Time` / `Win32_Processor` | ✅ **實測值** (`12.6%` / `3300 MHz`) |
+| **CPU 溫度** | WMI 未暴露核心溫度計 | ⚪ 顯示 **`-- °C`** |
+| **GPU 功耗 / 功耗上限** | `nvidia-smi` (`power.draw` / `power.limit`) | ✅ **實測值** (`5.19 W ~ 8.33 W` / `171 W`) |
+| **GPU 溫度 / P-State / 風扇 / VRAM** | `nvidia-smi` | ✅ **實測值** (`34~36 °C` / `P8` / `0%` / `2397 MB`) |
+| **RAM 使用量 / 電壓** | `Win32_OperatingSystem` / `Win32_PhysicalMemory` | ✅ **實測值** (`29.49 / 63.46 GB` · `1.10 V`) |
+| **RAM 功耗 / 溫度** | `rapl_package0_dram` 回傳 0、無溫度計 | ⚪ 顯示 **`-- W`** / **`-- °C`** |
+| **硬碟容量 (9 顆實體硬碟)** | `Win32_PhysicalDisk` / `Win32_LogicalDisk` | ✅ **實測值** (`3793.7 / 6183.3 GB`) |
+| **硬碟功耗 / 溫度** | 無硬碟瓦數計、`Get-StorageReliabilityCounter` 為空 | ⚪ 顯示 **`-- W`** / **`-- °C`** |
+| **主機板環境溫度** | `MSAcpi_ThermalZoneTemperature` (`_TZ.TZ00` = `301.0 K`) | ✅ **實測值** (`27.9 °C`) |
+| **主機板 / 風扇功耗** | 無主機板獨立功率計 | ⚪ 顯示 **`-- W`** |
+| **感測器實測總功 (CPU+GPU)** | `CPU RAPL + GPU SMI` | ✅ **實測值** (`26.26 W ~ 30.55 W`) |
+| **AC 牆壁插座功率計** | 未連接外部智慧插座 | ⚪ 顯示 **`-- W`** |
+| **電池狀態 (`SUN_PC` 桌機)** | `Win32_Battery` (0 顆電池) | ⚪ 顯示 **`-- %`** (無電池硬體) |
+| **APP 程序資源消耗** | `Get-Process` (`CPU` 秒數與 `WorkingSet64` MB) | ✅ **實測秒數/佔比/MB** (`L2.bin`、`chrome`、`parsecd` 等)；單一程序瓦時顯示 **`-- Wh`** |
 
 ---
 
-## 🚀 快速啟動指南 (Quick Start)
+## 📱 四大分頁與所有子選項完整功能
 
-### 方式 A：免安裝直接在瀏覽器預覽 (GitHub Pages)
-直接點擊：[https://zhijaysun0915.github.io/UniPowerGuard/](https://zhijaysun0915.github.io/UniPowerGuard/)
+1. **🔌 用電總覽 (`Overview`)**：
+   * 支援 **`[年]`、`[月]`、`[日]`、`[時]`** 四種時間粒度切換。
+   * 支援 **`總用電量 (kWh/Wh)`、`平均功率 (W)`、`實測電費 (NT$)`** 指標下拉切換與單價設定。
+   * 有實際取樣的時段顯示真實柱狀圖與樣本數；未取樣的時段嚴格顯示 `--`。
+2. **📋 電腦設備資訊 (`Devices & Control`)**：
+   * 顯示主機名稱、目前實際生效之 Windows 電源計畫、主機板 ACPI 實測溫度 (`27.9 °C`)、感測器實測功耗 (`CPU+GPU`) 與 AC 插座 (`-- W`)。
+   * **一鍵控制**：省電模式 (`a1841308`)、平衡模式 (`381b4222`)、高效能模式 (`8c5e7fda`)、釋放 AI 顯存，每次點擊皆會記錄至 `control_logs` SQL 資料表。
+   * **6 張硬體組件卡片**：CPU、GPU、RAM、實體磁碟陣列、主機板、AI 服務，全數顯示實測值或 `--`。
+3. **🔋 電池與 APP 耗電 (`Battery & Apps`)**：
+   * 支援 **`[過去 24 小時]`** 與 **`[過去 10 天]`** 切換。
+   * 顯示實測功率柱狀圖、實測 CPU 負載率柱狀圖，以及真實執行中程序 (`L2.bin`、`chrome`、`parsecd`、`explorer`、`audiodg`、`python` 等) 之 CPU 秒數、佔比 `%`、記憶體 `MB` 與 `-- Wh`。
+4. **🔍 歷史查詢 & 雲端 SQL (`History & Cloud SQL Console`)**：
+   * 內建 **線上 SQL 查詢主控台**，可直接在網頁執行標準 SQL 查詢 `hourly_logs`、`sensor_samples`、`app_energy_logs`、`control_logs` 四張表。
+   * 支援一鍵同步最新實測資料至 GitHub 雲端與匯出實測 CSV 報表。
 
 ---
 
-### 方式 B：本地運行（連接本機硬體感測器）
+## 🚀 本地感測器採集與雲端同步指令
 
-#### 1. 下載專案
-```bash
-git clone https://github.com/zhijaysun0915/UniPowerGuard.git
-cd UniPowerGuard
+```powershell
+# 啟動本地背景採集與 API 服務 (每 10 秒自動讀取硬體感測器並更新 power_history.db 與 cloud_db.json)
+python server.py
+
+# 單次抓取實測值並更新雲端 JSON 快照
+python server.py --once
 ```
-
-#### 2. 啟動服務
-
-* **Windows 用戶**：
-  直接按兩下執行 **`start_windows.bat`**  
-  *或在 PowerShell 執行：*
-  ```powershell
-  python server.py
-  ```
-
-* **macOS / Linux 用戶**：
-  在終端機執行：
-  ```bash
-  chmod +x start_mac.sh
-  ./start_mac.sh
-  ```
-  *或直接執行：*
-  ```bash
-  python3 server.py
-  ```
-
-#### 3. 開啟管控介面
-服務啟動後，瀏覽器會自動開啟，亦可手動訪問：
-* 本機訪問：`http://127.0.0.1:8095`
-* 區網設備（Mac mini、手機、平板）：`http://<這台電腦的區域IP>:8095`
-
----
-
-## 📂 專案結構 (Directory Layout)
-
-```text
-UniPowerGuard/
-├── index.html            # 現代化響應式前端 (HTML5 + Tailwind CSS + 多分頁架構)
-├── server.py             # 輕量後端與硬體感測器採集引擎 (純 Python 標準庫，零依賴)
-├── start_windows.bat     # Windows 一鍵啟動批次檔
-├── start_mac.sh          # macOS / Linux 一鍵啟動腳本
-├── power_history.db      # SQLite 本地歷史資料庫 (初次啟動自動生成)
-├── LICENSE               # MIT 開源授權條款
-└── README.md             # 專案詳細說明文件
-```
-
----
-
-## 📄 授權條款 (License)
-
-本專案採用 [MIT License](LICENSE) 開源授權，歡迎自由修改、擴充與整合。

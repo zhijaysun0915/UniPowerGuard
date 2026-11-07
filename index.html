@@ -3,8 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>UniPowerGuard — 跨平台電腦與筆電電源管控中心 (Windows & macOS)</title>
+  <title>UniPowerGuard — 實測感測器電源管控與雲端 SQL 系統</title>
+  <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/sql-wasm.js"></script>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft JhengHei", "PingFang TC", sans-serif;
@@ -39,36 +41,36 @@
       box-shadow: 0 1px 3px rgba(0,0,0,0.12);
     }
     .bar-transition {
-      transition: height 0.35s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.2s ease;
+      transition: height 0.3s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.2s ease;
     }
   </style>
 </head>
-<body class="min-h-screen pb-12">
+<body class="min-h-screen pb-14">
 
-  <!-- Top App Header & Cross-Platform Node Switcher -->
-  <header class="bg-white/90 backdrop-blur border-b border-stone-200 sticky top-0 z-30">
+  <!-- Top App Header -->
+  <header class="bg-white/95 backdrop-blur border-b border-stone-200 sticky top-0 z-30">
     <div class="max-w-4xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
       <div class="flex items-center gap-2.5">
         <div class="w-9 h-9 rounded-xl bg-teal-700 text-white flex items-center justify-center font-bold text-lg shadow-sm">⚡</div>
         <div>
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2 flex-wrap">
             <h1 class="font-bold text-base sm:text-lg text-stone-800">UniPowerGuard 電源管控中心</h1>
-            <span id="live-badge" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
-              <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>即時連線
+            <span id="live-badge" class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
+              <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span><span id="conn-mode-text">雲端 SQL + 實測連線</span>
             </span>
           </div>
-          <p class="text-xs text-stone-500" id="header-subtitle">支援 Windows 桌機/筆電 & macOS (MacBook / Mac mini)</p>
+          <p class="text-xs text-stone-500" id="header-subtitle">100% 實際硬體感測器量測值 · 無感測器或未記錄區間均顯示 <code class="font-bold text-stone-700">--</code></p>
         </div>
       </div>
 
-      <!-- Node / Platform Profile Selector -->
+      <!-- Node Selector -->
       <div class="flex items-center gap-2">
-        <label class="text-xs font-medium text-stone-500">監控節點：</label>
+        <label class="text-xs font-medium text-stone-500">資料來源節點：</label>
         <select id="node-selector" onchange="switchNodeProfile(this.value)" class="text-xs sm:text-sm font-semibold bg-stone-100 border border-stone-300 rounded-lg px-2.5 py-1.5 text-stone-800 focus:outline-none focus:ring-2 focus:ring-teal-600">
-          <option value="sun_pc">🖥️ SUN_PC (Windows 11 算力主機)</option>
-          <option value="win_laptop">💻 Windows 筆電模式 (電池+AC)</option>
-          <option value="mac_mini">🍎 Mac mini Gateway (macOS)</option>
-          <option value="macbook">🔋 MacBook Pro 筆電 (macOS)</option>
+          <option value="sun_pc">🖥️ SUN_PC (已連線：實測硬體資料庫)</option>
+          <option value="win_laptop">💻 Windows 筆電節點 (尚未接入感測器 --)</option>
+          <option value="mac_mini">🍎 Mac mini 節點 (尚未接入感測器 --)</option>
+          <option value="macbook">🔋 MacBook 節點 (尚未接入感測器 --)</option>
         </select>
       </div>
     </div>
@@ -77,7 +79,7 @@
   <!-- Main Container -->
   <main class="max-w-4xl mx-auto px-3 sm:px-5 pt-4">
 
-    <!-- Top 4 Main Navigation Tabs (Styled after Reference Image 1) -->
+    <!-- Top 4 Main Navigation Tabs -->
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-5">
       <button onclick="switchMainTab('overview')" id="tab-overview" class="tab-btn-active flex items-center justify-center gap-2 py-3 px-3 rounded-2xl border border-stone-200 shadow-sm transition">
         <span class="text-xl">🔌</span>
@@ -93,7 +95,7 @@
       </button>
       <button onclick="switchMainTab('history')" id="tab-history" class="tab-btn-inactive flex items-center justify-center gap-2 py-3 px-3 rounded-2xl border border-stone-200 shadow-sm transition">
         <span class="text-xl">🔍</span>
-        <span class="text-sm sm:text-base">歷史查詢</span>
+        <span class="text-sm sm:text-base">歷史查詢 & 雲端SQL</span>
       </button>
     </div>
 
@@ -104,15 +106,16 @@
       <!-- Granularity Pills (年 / 月 / 日 / 時) + Legend -->
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div class="flex items-center gap-2">
-          <button onclick="setGranularity('year')" id="gran-year" class="pill-active px-4 py-2 rounded-xl border border-stone-200 shadow-sm text-sm transition">年</button>
+          <button onclick="setGranularity('year')" id="gran-year" class="pill-inactive px-4 py-2 rounded-xl border border-stone-200 shadow-sm text-sm transition">年</button>
           <button onclick="setGranularity('month')" id="gran-month" class="pill-inactive px-4 py-2 rounded-xl border border-stone-200 shadow-sm text-sm transition">月</button>
           <button onclick="setGranularity('day')" id="gran-day" class="pill-inactive px-4 py-2 rounded-xl border border-stone-200 shadow-sm text-sm transition">日</button>
-          <button onclick="setGranularity('hour')" id="gran-hour" class="pill-inactive px-4 py-2 rounded-xl border border-stone-200 shadow-sm text-sm transition">時</button>
+          <button onclick="setGranularity('hour')" id="gran-hour" class="pill-active px-4 py-2 rounded-xl border border-stone-200 shadow-sm text-sm transition">時</button>
         </div>
 
         <div class="flex items-center gap-4 text-xs sm:text-sm font-medium text-stone-600">
-          <span class="flex items-center gap-1.5"><span class="w-3.5 h-3.5 rounded-sm inline-block" style="background:#38a3dc;"></span><span id="legend-prev">前期 / 歷史</span></span>
-          <span class="flex items-center gap-1.5"><span class="w-3.5 h-3.5 rounded-sm inline-block" style="background:#00699e;"></span><span id="legend-curr">當期 / 最新</span></span>
+          <span class="flex items-center gap-1.5"><span class="w-3.5 h-3.5 rounded-sm inline-block border border-stone-300 bg-stone-200"></span><span>無量測紀錄 (--)</span></span>
+          <span class="flex items-center gap-1.5"><span class="w-3.5 h-3.5 rounded-sm inline-block" style="background:#38a3dc;"></span><span id="legend-prev">已實測區間</span></span>
+          <span class="flex items-center gap-1.5"><span class="w-3.5 h-3.5 rounded-sm inline-block" style="background:#00699e;"></span><span id="legend-curr">當前選取</span></span>
         </div>
       </div>
 
@@ -120,17 +123,17 @@
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div class="relative inline-block">
           <select id="metric-selector" onchange="renderOverviewChart()" class="appearance-none bg-white border border-stone-200 rounded-xl px-5 py-2.5 pr-10 text-sm sm:text-base font-semibold text-stone-800 shadow-sm cursor-pointer focus:outline-none">
-            <option value="kwh">總用電量 (度 kWh / Wh)</option>
-            <option value="watts">平均功率 (瓦特 W)</option>
-            <option value="cost">預估電費 (NT$ 元)</option>
+            <option value="kwh">總用電量 (實測度數 kWh / Wh)</option>
+            <option value="watts">平均功率 (實測瓦特 W)</option>
+            <option value="cost">實測電費 (NT$ 元)</option>
           </select>
           <span class="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-stone-400 font-bold">&gt;</span>
         </div>
 
-        <div class="text-xs sm:text-sm text-stone-600 bg-white px-3.5 py-2 rounded-xl border border-stone-200 shadow-sm">
-          即時插座功耗：<strong id="overview-live-watts" class="text-teal-700 text-base">71.5 W</strong>
-          <span class="text-stone-400 mx-1">|</span>
-          DC 內部：<span id="overview-dc-watts" class="font-semibold">61.5 W</span>
+        <div class="text-xs sm:text-sm text-stone-600 bg-white px-3.5 py-2 rounded-xl border border-stone-200 shadow-sm flex items-center gap-2 flex-wrap">
+          <span>硬體感測器實測總和 (CPU+GPU)：<strong id="overview-sensor-watts" class="text-teal-700 text-base">26.3 W</strong></span>
+          <span class="text-stone-300">|</span>
+          <span>AC 插座功率計：<strong id="overview-ac-watts" class="text-stone-500">-- W</strong></span>
         </div>
       </div>
 
@@ -139,114 +142,112 @@
         <div class="flex items-center justify-between mb-2">
           <span id="chart-unit-label" class="text-xs sm:text-sm font-semibold text-stone-500">度 (kWh)</span>
           <div id="chart-selected-Readout" class="text-right">
-            <div id="callout-period" class="text-xs sm:text-sm font-bold text-stone-700">2026/11</div>
-            <div id="callout-value" class="text-sm sm:text-base font-extrabold text-amber-800">51.50度</div>
+            <div id="callout-period" class="text-xs sm:text-sm font-bold text-stone-700">--</div>
+            <div id="callout-value" class="text-sm sm:text-base font-extrabold text-amber-800">--</div>
+            <div id="callout-samples" class="text-[11px] text-stone-400">實測樣本數：--</div>
           </div>
         </div>
 
         <!-- Bar Chart Plot Area -->
-        <div class="relative h-64 sm:h-72 pt-6 pb-8 px-2 border-b border-l border-stone-300 flex items-end justify-between gap-1.5 sm:gap-2.5" id="overview-bars-container">
-          <!-- Horizontal Reference Grid Lines -->
-          <div class="absolute inset-x-0 top-6 border-t border-stone-200 pointer-events-none flex items-center">
-            <span id="y-max-label" class="text-xs text-stone-400 -mt-5 pl-1">80</span>
-          </div>
-          <div class="absolute inset-x-0 top-1/3 border-t border-stone-200 pointer-events-none flex items-center">
-            <span id="y-mid2-label" class="text-xs text-stone-400 -mt-5 pl-1">60</span>
-          </div>
-          <div class="absolute inset-x-0 top-2/3 border-t border-stone-200 pointer-events-none flex items-center">
-            <span id="y-mid1-label" class="text-xs text-stone-400 -mt-5 pl-1">30</span>
-          </div>
-          <!-- Bars dynamically rendered here -->
+        <div class="relative h-64 sm:h-72 pt-6 pb-8 px-2 border-b border-l border-stone-300 flex items-end justify-between gap-1 sm:gap-2" id="overview-bars-container">
+          <!-- Populated by JS -->
         </div>
-        <div class="text-right text-xs text-stone-500 mt-2" id="x-axis-unit-label">點擊任意柱狀圖可查看該時段詳細功耗與電費</div>
+        <div class="flex flex-wrap items-center justify-between text-xs text-stone-500 mt-2 gap-2">
+          <span id="x-axis-unit-label">點擊任意柱狀圖可查看該時段之實際量測數據；未開機採集之時段嚴格顯示為 <code class="font-bold">--</code></span>
+          <span id="last-updated-label" class="text-stone-400">最後實測時間：--</span>
+        </div>
       </div>
 
       <!-- Bottom Summary Cards (Matches Image 1: 近12月用電量 & 近12月預估電費) -->
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
         <div class="bg-white rounded-2xl border border-stone-200 p-5 text-center shadow-sm">
-          <div id="summary-title-1" class="text-sm sm:text-base font-bold text-stone-700 mb-1.5">近12月累計用電量</div>
-          <div id="summary-val-1" class="text-xl sm:text-2xl font-extrabold text-stone-900">618.4 度</div>
-          <div id="summary-sub-1" class="text-xs text-stone-500 mt-1">日均約 1.71 度 (平均功率 71.5 W)</div>
+          <div id="summary-title-1" class="text-sm sm:text-base font-bold text-stone-700 mb-1.5">本區間實際量測累計用電量</div>
+          <div id="summary-val-1" class="text-xl sm:text-2xl font-extrabold text-stone-900">--</div>
+          <div id="summary-sub-1" class="text-xs text-stone-500 mt-1">僅統計資料庫內有實際硬體取樣之時段</div>
         </div>
 
         <div class="bg-white rounded-2xl border border-stone-200 p-5 text-center shadow-sm">
           <div class="flex items-center justify-center gap-1.5 mb-1.5">
-            <span id="summary-title-2" class="text-sm sm:text-base font-bold text-stone-700">預估電費統計</span>
-            <button onclick="promptTariff()" title="設定每度電單價" class="text-stone-500 hover:text-teal-700 font-bold text-sm px-1.5 py-0.5 rounded border border-stone-300 bg-stone-50">✎ 單價</button>
+            <span id="summary-title-2" class="text-sm sm:text-base font-bold text-stone-700">本區間實測累計電費</span>
+            <button onclick="promptTariff()" title="設定每度電單價" class="text-stone-600 hover:text-teal-700 font-bold text-xs px-2 py-0.5 rounded border border-stone-300 bg-stone-50">✎ 設定單價</button>
           </div>
-          <div id="summary-val-2" class="text-xl sm:text-2xl font-extrabold text-teal-800">NT$ 2,783</div>
-          <div id="summary-sub-2" class="text-xs text-stone-400 mt-1">目前單價設定：NT$ 4.50 / 度 (點擊右上角可修改)</div>
+          <div id="summary-val-2" class="text-xl sm:text-2xl font-extrabold text-teal-800">--</div>
+          <div id="summary-sub-2" class="text-xs text-stone-400 mt-1">目前單價設定：NT$ 4.50 / 度</div>
         </div>
       </div>
     </section>
 
     <!-- =================================================================== -->
-    <!-- TAB 2: 電腦設備與電源管控 (Reference Image 2: 環境溫度 + 一鍵控制 + 設備卡片) -->
+    <!-- TAB 2: 電腦設備資訊 (Reference Image 2: 環境溫度 + 一鍵控制 + 設備卡片) -->
     <!-- =================================================================== -->
     <section id="view-devices" class="hidden space-y-5">
-      <!-- Top Environment & System Live Banner (Matches Image 2 Top Weather/Temp Banner) -->
+      <!-- Top Environment & System Live Banner -->
       <div class="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm flex flex-wrap items-center justify-between gap-4">
         <div class="flex items-center gap-4">
           <div class="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center text-2xl">⚡</div>
           <div>
-            <div class="flex items-center gap-3">
-              <span id="dev-host-title" class="font-bold text-base sm:text-lg text-stone-800">SUN_PC 主機</span>
-              <span id="dev-power-scheme" class="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-200">平衡模式</span>
+            <div class="flex items-center gap-3 flex-wrap">
+              <span id="dev-host-title" class="font-bold text-base sm:text-lg text-stone-800">SUN_PC</span>
+              <span id="dev-power-scheme" class="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-200">平衡 (Balanced)</span>
             </div>
-            <div class="text-xs sm:text-sm text-stone-500 mt-0.5" id="dev-battery-banner">電源狀態：AC 市電直連 (PSU 轉換效率 86%)</div>
+            <div class="text-xs sm:text-sm text-stone-500 mt-0.5" id="dev-battery-banner">電池硬體：-- (無電池 / 桌機 AC 供電)</div>
           </div>
         </div>
 
-        <div class="flex items-center gap-6">
+        <div class="flex items-center gap-5 sm:gap-6 flex-wrap">
           <div class="text-right">
-            <div class="text-xs text-stone-500">🌡️ 機殼/主機板溫度</div>
-            <div class="text-xl sm:text-2xl font-bold text-stone-800"><span id="banner-mb-temp">28</span> <span class="text-sm font-normal">°C</span></div>
+            <div class="text-xs text-stone-500">🌡️ 主機板 ACPI 實測溫度</div>
+            <div class="text-xl sm:text-2xl font-bold text-stone-800"><span id="banner-mb-temp">27.9</span> <span class="text-sm font-normal">°C</span></div>
           </div>
-          <div class="text-right border-l border-stone-200 pl-6">
-            <div class="text-xs text-stone-500">🔌 即時總功耗 (AC)</div>
-            <div class="text-xl sm:text-2xl font-extrabold text-teal-700"><span id="banner-ac-watts">71.5</span> <span class="text-sm font-normal">W</span></div>
+          <div class="text-right border-l border-stone-200 pl-5">
+            <div class="text-xs text-stone-500">⚡ 感測器實測功耗 (CPU+GPU)</div>
+            <div class="text-xl sm:text-2xl font-extrabold text-teal-700"><span id="banner-sensor-watts">26.3</span> <span class="text-sm font-normal">W</span></div>
+          </div>
+          <div class="text-right border-l border-stone-200 pl-5">
+            <div class="text-xs text-stone-500">🔌 AC 牆壁插座功率計</div>
+            <div class="text-xl sm:text-2xl font-bold text-stone-400"><span id="banner-ac-watts">--</span> <span class="text-sm font-normal">W</span></div>
           </div>
         </div>
       </div>
 
       <!-- 一鍵控制 (Quick Power Scenarios - Matches Image 2) -->
       <div class="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-        <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
           <div class="flex items-center gap-2 font-bold text-stone-700 text-base">
             <span>👍</span>
-            <span>一鍵電源與算力控制</span>
+            <span>一鍵控制 (實際呼叫 Windows powercfg 與 nvidia-smi 並寫入控制紀錄表)</span>
           </div>
-          <span id="control-feedback" class="text-xs font-semibold text-teal-700">點擊立即套用硬體功耗策略</span>
+          <span id="control-feedback" class="text-xs font-semibold text-teal-700">點擊立即套用硬體策略並記錄至 SQL</span>
         </div>
 
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
           <button onclick="sendControl('set_power_mode', 'eco')" class="flex flex-col items-start p-3.5 rounded-xl border border-stone-200 bg-stone-50 hover:bg-emerald-50 hover:border-emerald-300 transition text-left">
-            <span class="text-lg mb-1">🌿 省電靜音模式</span>
-            <span class="text-xs text-stone-500">Windows 省電 + GPU 162W</span>
+            <span class="text-base sm:text-lg font-bold mb-1">🌿 省電模式</span>
+            <span class="text-xs text-stone-500">GUID: a1841308 + GPU 162W</span>
           </button>
           <button onclick="sendControl('set_power_mode', 'balanced')" class="flex flex-col items-start p-3.5 rounded-xl border border-teal-300 bg-teal-50/60 hover:bg-teal-100/70 transition text-left">
-            <span class="text-lg mb-1">⚖️ 日常平衡模式</span>
-            <span class="text-xs text-stone-600">Windows 平衡 + GPU 171W</span>
+            <span class="text-base sm:text-lg font-bold mb-1">⚖️ 平衡模式</span>
+            <span class="text-xs text-stone-600">GUID: 381b4222 + GPU 171W</span>
           </button>
           <button onclick="sendControl('set_power_mode', 'performance')" class="flex flex-col items-start p-3.5 rounded-xl border border-stone-200 bg-stone-50 hover:bg-amber-50 hover:border-amber-300 transition text-left">
-            <span class="text-lg mb-1">🚀 AI 算力全開</span>
-            <span class="text-xs text-stone-500">高效能 + GPU 180W 滿血</span>
+            <span class="text-base sm:text-lg font-bold mb-1">🚀 高效能模式</span>
+            <span class="text-xs text-stone-500">GUID: 8c5e7fda + GPU 180W</span>
           </button>
           <button onclick="sendControl('unload_ollama', '1')" class="flex flex-col items-start p-3.5 rounded-xl border border-stone-200 bg-stone-50 hover:bg-rose-50 hover:border-rose-300 transition text-left">
-            <span class="text-lg mb-1">🧹 釋放 AI 顯存</span>
-            <span class="text-xs text-stone-500">卸載閒置 Ollama/Strata</span>
+            <span class="text-base sm:text-lg font-bold mb-1">🧹 釋放 AI 顯存</span>
+            <span class="text-xs text-stone-500">發送 Ollama keep_alive=0</span>
           </button>
         </div>
       </div>
 
-      <!-- 我的電腦組件與設備 (2-Column Grid Matching Image 2 "我的家電") -->
+      <!-- 我的電腦設備與硬體感測器 (2-Column Grid Matching Image 2 "我的家電") -->
       <div>
-        <div class="flex items-center justify-between mb-3 px-1">
+        <div class="flex items-center justify-between mb-3 px-1 flex-wrap gap-2">
           <div class="flex items-center gap-2 font-bold text-stone-700 text-base">
             <span>🏠</span>
-            <span>我的硬體組件與算力節點 (即時 Sensor + 規格回推)</span>
+            <span>我的硬體設備 (僅顯示真實 Sensor 數值，無感測器項目顯示 <code class="text-stone-800">--</code>)</span>
           </div>
-          <span class="text-xs text-stone-500">綠燈＝運行中 / 紅燈＝待命或關閉</span>
+          <span class="text-xs text-stone-500">資料來源：RAPL / NVML / ACPI / SMBIOS</span>
         </div>
 
         <div id="device-cards-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
@@ -266,57 +267,71 @@
           <button onclick="setBatteryRange('10d')" id="bat-seg-10d" class="text-stone-600 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition">過去 10 天</button>
         </div>
 
-        <!-- Last Charged / Power Supply Info -->
+        <!-- Last Charged / Battery Hardware Info -->
         <div class="flex flex-wrap items-center justify-between gap-2 border-b border-stone-100 pb-3">
           <div>
-            <div class="text-base sm:text-lg font-bold text-stone-900" id="bat-status-headline">上次充電到 100% (AC 直連穩定供電中)</div>
-            <div class="text-xs sm:text-sm text-stone-400" id="bat-status-sub">今日 上午 08:00 · 電池健康度 100%</div>
+            <div class="text-base sm:text-lg font-bold text-stone-900">
+              電池電量：<span id="bat-pct-headline" class="text-teal-700">-- %</span>
+              <span id="bat-status-headline" class="text-xs sm:text-sm font-normal text-stone-500 ml-1">(無電池硬體 / AC 市電直連)</span>
+            </div>
+            <div class="text-xs sm:text-sm text-stone-400 mt-0.5">
+              上次充電到 100%：<span id="bat-last-charge">--</span>
+            </div>
           </div>
           <div class="text-right">
-            <span class="text-xs text-stone-400 block">當前總負載</span>
-            <span id="bat-live-watts" class="text-lg font-extrabold text-emerald-600">71.5 W</span>
+            <span class="text-xs text-stone-400 block">實測感測器功率 (CPU+GPU)</span>
+            <span id="bat-live-watts" class="text-lg font-extrabold text-emerald-600">26.3 W</span>
           </div>
         </div>
 
-        <!-- Chart 1: 電池電量 / 功耗負載 (Green Bars like iOS Battery) -->
+        <!-- Chart 1: 實測電量 / 感測器功率紀錄 (Green Bars) -->
         <div>
-          <div class="flex items-center justify-between mb-1.5">
-            <span class="text-xs sm:text-sm font-semibold text-stone-500" id="bat-chart1-title">電池電量與供電狀態 (%)</span>
-            <span class="text-xs text-emerald-600 font-medium">⚡ 綠色底條代表接上電源 / 充電區間</span>
+          <div class="flex items-center justify-between mb-1.5 flex-wrap gap-1">
+            <span class="text-xs sm:text-sm font-semibold text-stone-600" id="bat-chart1-title">電池電量 (%) / 實測感測器平均功率 (W)</span>
+            <span class="text-xs text-stone-400">未量測時段顯示 <code class="font-bold">--</code></span>
           </div>
-          <div class="relative h-36 border-t border-b border-stone-200 flex items-end justify-between gap-1 pt-3 pb-5 px-1" id="ios-battery-bars">
+          <div class="relative h-36 border-t border-b border-stone-200 flex items-end justify-between gap-1 pt-4 pb-6 px-1" id="ios-battery-bars">
             <!-- Populated by JS -->
           </div>
         </div>
 
-        <!-- Chart 2: 活躍運算時間 (Blue Bars like iOS Activity) -->
+        <!-- Chart 2: 實測 CPU 負載率 / 取樣紀錄 (Blue Bars) -->
         <div>
-          <div class="flex items-center justify-between mb-1.5">
-            <span class="text-xs sm:text-sm font-semibold text-stone-500" id="bat-chart2-title">活躍運算時間 (分/每小時)</span>
-            <span class="text-xs text-stone-400">60分滿載基準</span>
+          <div class="flex items-center justify-between mb-1.5 flex-wrap gap-1">
+            <span class="text-xs sm:text-sm font-semibold text-stone-600" id="bat-chart2-title">實測 CPU 平均負載率 (%) 與取樣分布</span>
+            <span class="text-xs text-stone-400">100% 滿載基準</span>
           </div>
-          <div class="relative h-32 border-t border-b border-stone-200 flex items-end justify-between gap-1 pt-3 pb-5 px-1" id="ios-activity-bars">
+          <div class="relative h-32 border-t border-b border-stone-200 flex items-end justify-between gap-1 pt-4 pb-6 px-1" id="ios-activity-bars">
             <!-- Populated by JS -->
           </div>
         </div>
 
-        <!-- Active vs Idle Time Summary (Matches "螢幕開啟 / 螢幕關閉") -->
-        <div class="grid grid-cols-2 gap-4 pt-1 border-b border-stone-100 pb-4">
+        <!-- Summary Metrics -->
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-4 pt-1 border-b border-stone-100 pb-4">
           <div>
-            <div class="text-xs sm:text-sm font-semibold text-sky-600">高負載 / 螢幕活躍</div>
-            <div id="ios-active-total" class="text-lg sm:text-xl font-bold text-stone-900 mt-0.5">11小時 24分鐘</div>
+            <div class="text-xs sm:text-sm font-semibold text-sky-600">已實測紀錄時段數</div>
+            <div id="ios-recorded-slots" class="text-lg sm:text-xl font-bold text-stone-900 mt-0.5">--</div>
           </div>
           <div>
-            <div class="text-xs sm:text-sm font-semibold text-sky-600">背景待命 / 低功耗</div>
-            <div id="ios-idle-total" class="text-lg sm:text-xl font-bold text-stone-900 mt-0.5">12小時 36分鐘</div>
+            <div class="text-xs sm:text-sm font-semibold text-sky-600">實測樣本總筆數</div>
+            <div id="ios-total-samples" class="text-lg sm:text-xl font-bold text-stone-900 mt-0.5">--</div>
+          </div>
+          <div>
+            <div class="text-xs sm:text-sm font-semibold text-sky-600">螢幕開啟 / 關閉時間</div>
+            <div id="ios-screen-time" class="text-lg sm:text-xl font-bold text-stone-400 mt-0.5">-- / --</div>
           </div>
         </div>
 
-        <!-- Per-App Power Usage List (Matches "依APP分類的電池用量") -->
+        <!-- Per-App Usage List (Matches "依APP分類的電池用量") -->
         <div>
-          <div class="flex items-center justify-between mb-3">
-            <span class="text-xs sm:text-sm font-semibold text-stone-400" id="app-list-header">依 APP / 處理程序 分類的用電量</span>
-            <button onclick="toggleAppMetricMode()" id="app-metric-toggle" class="text-xs sm:text-sm font-semibold text-sky-600 hover:underline">切換顯示瓦時 (Wh)</button>
+          <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <div>
+              <span class="text-xs sm:text-sm font-bold text-stone-700">依 APP / 處理程序 分類的實際資源消耗 (Get-Process 實測)</span>
+              <p class="text-[11px] text-stone-400">CPU 時間 (秒) 與記憶體 (MB) 為 OS 實測值；Windows 無單一程序硬體瓦時計，故單一程序 Wh 顯示為 <code class="font-bold">--</code></p>
+            </div>
+            <button onclick="toggleAppMetricMode()" id="app-metric-toggle" class="text-xs sm:text-sm font-semibold text-sky-600 hover:underline px-2.5 py-1 rounded-lg bg-sky-50 border border-sky-200">
+              切換顯示：CPU 佔比 (%) / 實測秒數 &amp; Wh
+            </button>
           </div>
           <div id="ios-app-list" class="divide-y divide-stone-100">
             <!-- Populated by JS -->
@@ -326,54 +341,86 @@
     </section>
 
     <!-- =================================================================== -->
-    <!-- TAB 4: 歷史查詢與跨平台部署 (Reference Image 1 Tab 3) -->
+    <!-- TAB 4: 歷史查詢 & 雲端 SQL 資料庫 (In-Browser SQL.js + Cloud Sync) -->
     <!-- =================================================================== -->
     <section id="view-history" class="hidden space-y-4">
+      <!-- Cloud SQL Engine & Sync Status Card -->
       <div class="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm space-y-4">
         <div class="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 class="font-bold text-base sm:text-lg text-stone-800">歷史功耗明細與跨平台部署</h2>
-            <p class="text-xs text-stone-500">自動記錄每年 / 每月 / 每日 / 每小時之平均瓦數、峰值瓦數、度數 (kWh) 與電費</p>
+            <div class="flex items-center gap-2">
+              <h2 class="font-bold text-base sm:text-lg text-stone-800">☁️ 雲端 SQL 資料庫與歷史實測查詢</h2>
+              <span id="sql-engine-badge" class="text-xs px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 font-semibold">SQLite WebAssembly 已就緒</span>
+            </div>
+            <p class="text-xs text-stone-500 mt-0.5">
+              不依賴本地後端！網頁直接在瀏覽器內載入雲端 <code class="bg-stone-100 px-1 rounded">cloud_db.json</code> / <code class="bg-stone-100 px-1 rounded">power_history.db</code> 建立完整關聯式 SQL 資料表，可隨時隨地線上執行標準 SQL 查詢。
+            </p>
           </div>
-          <button onclick="exportCSV()" class="px-4 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs sm:text-sm font-semibold shadow-sm transition">
-            📥 匯出 CSV 報表
-          </button>
-        </div>
 
-        <!-- Cross-platform deployment guide box -->
-        <div class="bg-stone-50 rounded-xl p-4 border border-stone-200 text-xs sm:text-sm space-y-2">
-          <div class="font-bold text-stone-800">💻 如何在 Windows 桌機/筆電 與 Mac (MacBook / Mac mini) 通用運行？</div>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-stone-600">
-            <div class="bg-white p-3 rounded-lg border border-stone-200">
-              <div class="font-semibold text-stone-800 mb-1">🪟 Windows (SUN_PC / Windows 筆電)</div>
-              <code class="block bg-stone-100 p-1.5 rounded text-xs text-stone-800">python server.py</code>
-              <p class="mt-1 text-xs text-stone-500">自動抓取 Intel RAPL 硬體功耗、NVIDIA SMI、Windows 筆電電池 API 與 Powercfg 電源計畫控制。</p>
-            </div>
-            <div class="bg-white p-3 rounded-lg border border-stone-200">
-              <div class="font-semibold text-stone-800 mb-1">🍎 macOS (MacBook 筆電 / Mac mini)</div>
-              <code class="block bg-stone-100 p-1.5 rounded text-xs text-stone-800">python3 server.py</code>
-              <p class="mt-1 text-xs text-stone-500">零第三方依賴！自動呼叫 <code>pmset -g batt</code> 與 <code>AppleSmartBattery</code> 監控筆電電量與行程耗電。</p>
-            </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <button onclick="syncToGitHubCloud()" class="px-3.5 py-2 rounded-xl bg-stone-800 hover:bg-stone-900 text-white text-xs sm:text-sm font-semibold shadow-sm transition">
+              ☁️ 同步最新實測至雲端
+            </button>
+            <button onclick="exportCSV()" class="px-3.5 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs sm:text-sm font-semibold shadow-sm transition">
+              📥 匯出實測 CSV
+            </button>
           </div>
         </div>
 
-        <!-- Historical Log Table -->
-        <div class="overflow-x-auto">
-          <table class="w-full text-left border-collapse text-xs sm:text-sm">
-            <thead>
-              <tr class="border-b border-stone-200 text-stone-500 bg-stone-50">
-                <th class="py-2.5 px-3">時間區間</th>
-                <th class="py-2.5 px-3">平均功耗 (W)</th>
-                <th class="py-2.5 px-3">峰值功耗 (W)</th>
-                <th class="py-2.5 px-3">CPU / GPU (W)</th>
-                <th class="py-2.5 px-3">耗電量 (度 kWh)</th>
-                <th class="py-2.5 px-3">預估電費 (NT$)</th>
-              </tr>
-            </thead>
-            <tbody id="history-table-body" class="divide-y divide-stone-100">
-              <!-- Populated by JS -->
-            </tbody>
-          </table>
+        <!-- Interactive SQL Query Console -->
+        <div class="bg-stone-50 rounded-xl p-4 border border-stone-200 space-y-3">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <span class="text-xs sm:text-sm font-bold text-stone-700">💻 線上 SQL 查詢主控台 (支援標準 SQLite 語法，直接查詢雲端/實測資料表)</span>
+            <div class="flex flex-wrap gap-1.5">
+              <button onclick="runPresetSQL('hourly')" class="text-xs px-2.5 py-1 rounded-lg bg-white border border-stone-300 hover:bg-teal-50 font-medium">查每小時實測 (hourly_logs)</button>
+              <button onclick="runPresetSQL('samples')" class="text-xs px-2.5 py-1 rounded-lg bg-white border border-stone-300 hover:bg-teal-50 font-medium">查原始感測器取樣 (sensor_samples)</button>
+              <button onclick="runPresetSQL('apps')" class="text-xs px-2.5 py-1 rounded-lg bg-white border border-stone-300 hover:bg-teal-50 font-medium">查程序耗用表 (app_energy_logs)</button>
+              <button onclick="runPresetSQL('controls')" class="text-xs px-2.5 py-1 rounded-lg bg-white border border-stone-300 hover:bg-teal-50 font-medium">查控制紀錄 (control_logs)</button>
+            </div>
+          </div>
+
+          <div class="flex flex-col sm:flex-row gap-2">
+            <textarea id="sql-query-input" rows="2" class="flex-1 font-mono text-xs sm:text-sm bg-white border border-stone-300 rounded-xl p-2.5 text-stone-800 focus:outline-none focus:ring-2 focus:ring-teal-600">SELECT hour_key, avg_sensor_w, peak_sensor_w, avg_cpu_w, avg_gpu_w, ac_wall_w, avg_gpu_temp_c, avg_mb_temp_c, sample_count FROM hourly_logs ORDER BY hour_key DESC;</textarea>
+            <button onclick="executeSQLQuery()" class="px-5 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-bold text-xs sm:text-sm shrink-0 shadow-sm">
+              ▶ 執行 SQL
+            </button>
+          </div>
+
+          <div id="sql-query-status" class="text-xs text-stone-500"></div>
+
+          <!-- SQL Query Result Table -->
+          <div class="overflow-x-auto max-h-72 border border-stone-200 rounded-xl bg-white">
+            <table class="w-full text-left border-collapse text-xs">
+              <thead id="sql-result-thead" class="bg-stone-100 text-stone-600 sticky top-0 border-b border-stone-200"></thead>
+              <tbody id="sql-result-tbody" class="divide-y divide-stone-100 font-mono"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Standard Historical Period Table (Hourly / Daily Real Logs) -->
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="font-bold text-sm sm:text-base text-stone-800">📊 實測感測器明細列表 (空缺或未量測欄位嚴格顯示 <code class="text-stone-700">--</code>)</h3>
+            <span id="history-count-badge" class="text-xs text-stone-500"></span>
+          </div>
+          <div class="overflow-x-auto border border-stone-200 rounded-xl">
+            <table class="w-full text-left border-collapse text-xs sm:text-sm">
+              <thead>
+                <tr class="border-b border-stone-200 text-stone-500 bg-stone-50">
+                  <th class="py-2.5 px-3">取樣時間</th>
+                  <th class="py-2.5 px-3">感測器總功 (W)</th>
+                  <th class="py-2.5 px-3">CPU RAPL (W)</th>
+                  <th class="py-2.5 px-3">GPU SMI (W)</th>
+                  <th class="py-2.5 px-3">AC 插座 (W)</th>
+                  <th class="py-2.5 px-3">CPU / GPU / 主機板溫度</th>
+                  <th class="py-2.5 px-3">RAM 使用率</th>
+                </tr>
+              </thead>
+              <tbody id="history-table-body" class="divide-y divide-stone-100">
+                <!-- Populated by JS -->
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </section>
@@ -382,210 +429,1716 @@
 
   <script>
     // =========================================================================
-    // Default Real Baseline Data from SUN_PC + Cross-Platform Profiles
+    // Helper Functions for Strict Real Value Formatting (Null/Undefined -> '--')
+    // =========================================================================
+    function fmtNum(val, decimals = 1, suffix = '') {
+      if (val === null || val === undefined || val === '' || Number.isNaN(Number(val))) {
+        return '--';
+      }
+      return `${Number(val).toFixed(decimals)}${suffix}`;
+    }
+
+    function fmtInt(val, suffix = '') {
+      if (val === null || val === undefined || val === '' || Number.isNaN(Number(val))) {
+        return '--';
+      }
+      return `${Math.round(Number(val))}${suffix}`;
+    }
+
+    function fmtStr(val) {
+      if (val === null || val === undefined || val === '') {
+        return '--';
+      }
+      return String(val);
+    }
+
+    // =========================================================================
+    // Global State & Initial Real Snapshot from SUN_PC
     // =========================================================================
     let currentTab = 'overview';
-    let currentGranularity = 'year'; // 'year' | 'month' | 'day' | 'hour'
+    let currentGranularity = 'hour'; // Default to 'hour' or 'year', user can switch 年/月/日/時
     let selectedBarIndex = -1;
-    let batteryRange = '24h'; // '24h' | '10d'
-    let showAppWh = false;
+    let batteryRange = '24h';
+    let appMetricMode = 0; // 0: CPU Share %, 1: CPU Seconds + RAM MB, 2: Measured Wh (--)
     let currentNode = 'sun_pc';
+    let sqlDb = null; // In-browser SQL.js SQLite instance
 
-    const NODE_PROFILES = {
-      sun_pc: {
-        hostname: "SUN_PC (Windows 11 算力主機)",
-        is_laptop: false,
-        power_mode_name: "平衡模式 (Balanced)",
-        ambient_temp_c: 28,
-        dc_total_w: 61.5,
-        ac_total_w: 71.5,
-        battery: { present: false, percent: 100, charging: true, status_text: "AC 市電直連 (PSU 86% 效率)", last_full_charge: "AC 常駐供電 · 80Plus Gold" },
-        components: {
-          cpu: { name: "CPU 處理器 (Ultra 7 265K)", power_w: 25.4, temp_c: 42, status: "on", sub: "20核心 · RAPL 實測 (PP0 16.0W + Uncore 9.4W)" },
-          gpu: { name: "GPU 顯示卡 (RTX 5060 Ti 16G)", power_w: 5.2, temp_c: 34, status: "on", sub: "P8 省電待命 · 風扇 0% · 上限 171W" },
-          ram: { name: "記憶體 (64GB DDR5-5600)", power_w: 6.4, temp_c: 33, status: "on", sub: "4×16GB Crucial @ 1.1V · 已用 24.2 GB (38%)" },
-          disk: { name: "儲存陣列 (2×NVMe + 7×SATA)", power_w: 5.7, temp_c: 35, status: "on", sub: "T500 2TB + XPG 1TB + 7顆 SATA 硬碟" },
-          mb_vrm_fan: { name: "主機板與散熱 (Z890 WIFI7)", power_w: 18.8, temp_c: 28, status: "on", sub: "PCH 4.5W + 周邊 7.5W + VRM損耗 2.3W + 風扇 4.5W" },
-          strata: { name: "Strata 極限引擎 (Qwen3.8)", power_w: 0.0, temp_c: 28, status: "off", sub: "已關閉 (開啟推論時約 +185W)" }
-        }
+    // Initial embedded snapshot strictly from real SUN_PC measurement (updated dynamically from cloud_db.json & /api/dashboard)
+    let cloudData = {
+  "generated_at": "2026-11-07 12:17:45",
+  "live": {
+    "timestamp": "2026-11-07 12:17:45",
+    "hostname": "SUN_PC",
+    "os_type": "Windows 11",
+    "os_version": "10.0.26300",
+    "is_laptop": false,
+    "battery": {
+      "present": false,
+      "percent": null,
+      "charging": null,
+      "status_text": "無電池硬體 (桌機 AC 市電直連)",
+      "last_full_charge": null
+    },
+    "power_mode": "balanced",
+    "power_mode_name": "平衡 (Balanced)",
+    "raw_power_scheme": "電源配置 GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (平衡)",
+    "tariff_ntd_per_kwh": 4.5,
+    "ambient_temp_c": 27.9,
+    "measured_sensor_total_w": 29.98,
+    "ac_wall_w": null,
+    "components": {
+      "cpu": {
+        "name": "Intel(R) Core(TM) Ultra 7 265K (20C/20T)",
+        "power_w": 22.48,
+        "cores_w": 13.3,
+        "uncore_w": 9.18,
+        "dram_w": null,
+        "load_pct": 16.7,
+        "clock_mhz": 3300,
+        "temp_c": null,
+        "sensor_source": "Intel RAPL Energy Meter (rapl_package0_pkg / pp0)",
+        "status": "on"
       },
-      win_laptop: {
-        hostname: "Windows 筆電 (電池/AC 雙模)",
-        is_laptop: true,
-        power_mode_name: "最佳電源效率 (Battery Saver)",
-        ambient_temp_c: 36,
-        dc_total_w: 16.8,
-        ac_total_w: 18.5,
-        battery: { present: true, percent: 78, charging: false, status_text: "電池放電中 (78% · 預估剩餘 4小時12分)", last_full_charge: "今日 上午 07:40 充電至 100%" },
-        components: {
-          cpu: { name: "行動版處理器 (Core Ultra 7)", power_w: 8.5, temp_c: 45, status: "on", sub: "低功耗 P-State 運作中" },
-          gpu: { name: "內顯 + 獨顯 Optimus 待命", power_w: 1.8, temp_c: 39, status: "on", sub: "獨顯休眠中 · 內顯負責螢幕輸出" },
-          ram: { name: "LPDDR5x 32GB 記憶體", power_w: 1.9, temp_c: 37, status: "on", sub: "已用 14.2 GB (44%)" },
-          disk: { name: "NVMe PCIe 4.0 SSD 1TB", power_w: 0.9, temp_c: 36, status: "on", sub: "APST 省電開啟" },
-          mb_vrm_fan: { name: "筆電螢幕 (14吋 OLED) + 主機板", power_w: 5.4, temp_c: 34, status: "on", sub: "螢幕亮度 60% (3.6W) + WiFi 7 (1.8W)" },
-          strata: { name: "遠端連線 SUN_PC 算力API", power_w: 0.0, temp_c: 30, status: "off", sub: "本地零算力負載" }
-        }
+      "gpu": {
+        "name": "NVIDIA GeForce RTX 5060 Ti",
+        "power_w": 7.5,
+        "limit_w": 171.0,
+        "default_limit_w": 180.0,
+        "max_limit_w": 206.0,
+        "load_pct": 4.0,
+        "temp_c": 37.0,
+        "pstate": "P8",
+        "fan_pct": 0,
+        "vram_mb": 2398,
+        "vram_total_mb": 16311,
+        "clock_mhz": 765,
+        "sensor_source": "NVIDIA NVML / nvidia-smi",
+        "status": "on"
       },
-      mac_mini: {
-        hostname: "Mac mini Gateway (Apple M系列)",
-        is_laptop: false,
-        power_mode_name: "macOS 自動能源管理",
-        ambient_temp_c: 31,
-        dc_total_w: 10.8,
-        ac_total_w: 12.2,
-        battery: { present: false, percent: 100, charging: true, status_text: "AC 市電常駐 (極致低功耗 Gateway)", last_full_charge: "全年 24H 待命僅約 10~15W" },
-        components: {
-          cpu: { name: "Apple Silicon SoC (CPU+GPU+ANE)", power_w: 4.8, temp_c: 35, status: "on", sub: "E-Cores 處理 Gateway 轉發與 SSH 排程" },
-          gpu: { name: "Apple 整合式 GPU 核心", power_w: 0.6, temp_c: 33, status: "on", sub: "Headless 無螢幕超低功耗狀態" },
-          ram: { name: "Unified Memory 統一記憶體", power_w: 1.6, temp_c: 32, status: "on", sub: "SoC 封裝內建低功耗通道" },
-          disk: { name: "Apple 內建快閃儲存 SSD", power_w: 0.8, temp_c: 31, status: "on", sub: "待命讀寫極低耗電" },
-          mb_vrm_fan: { name: "Gigabit 乙太網路 + Wi-Fi + 靜音風扇", power_w: 4.4, temp_c: 30, status: "on", sub: "全天候 Gateway 路由連線" },
-          strata: { name: "遠端調度 SUN_PC (192.168.0.16)", power_w: 0.0, temp_c: 30, status: "on", sub: "SSH / API 閘道連線就緒" }
-        }
+      "ram": {
+        "name": "4×16GB DDR5-5600",
+        "power_w": null,
+        "used_gb": 29.51,
+        "total_gb": 63.46,
+        "used_pct": 46.5,
+        "voltage_v": 1.1,
+        "temp_c": null,
+        "sensor_source": "Win32_PhysicalMemory & OperatingSystem (DRAM RAPL 未提供瓦數)",
+        "status": "on"
       },
-      macbook: {
-        hostname: "MacBook Pro (macOS 筆電)",
-        is_laptop: true,
-        power_mode_name: "低耗電模式 (Low Power Mode)",
-        ambient_temp_c: 34,
-        dc_total_w: 11.4,
-        ac_total_w: 12.5,
-        battery: { present: true, percent: 84, charging: false, status_text: "電池供電中 (84% · 預估續航 9小時30分)", last_full_charge: "週四 下午 11:20 充電至 100%" },
+      "disk": {
+        "name": "實體磁碟陣列 (9 顆硬碟)",
+        "power_w": null,
+        "used_gb": 3793.7,
+        "total_gb": 6183.3,
+        "used_pct": 61.4,
+        "active_drives": 9,
+        "temp_c": null,
+        "sensor_source": "Win32_PhysicalDisk / LogicalDisk (無硬碟瓦數與溫度計)",
+        "status": "on"
+      },
+      "mb_vrm_fan": {
+        "name": "Gigabyte Technology Co., Ltd. Z890 EAGLE WIFI7",
+        "power_w": null,
+        "temp_c": 27.9,
+        "sensor_source": "MSAcpi_ThermalZoneTemperature (_TZ.TZ00)",
+        "status": "on"
+      },
+      "ai_services": {
+        "name": "本地 AI 服務 (Ollama / Strata)",
+        "power_w": null,
+        "temp_c": null,
+        "ollama_on": true,
+        "ollama_ram_mb": 12.7,
+        "strata_on": false,
+        "strata_ram_mb": 0,
+        "sensor_source": "Win32 Process Table",
+        "status": "on"
+      }
+    },
+    "top_apps": [
+      {
+        "proc_name": "L2.bin",
+        "name": "Lineage II 天堂2 (L2.bin)",
+        "category": "遊戲程序",
+        "icon": "🎮",
+        "count": 3,
+        "cpu_s": 85279.2,
+        "ram_mb": 4042.1,
+        "share_pct": 54.3,
+        "measured_wh": null
+      },
+      {
+        "proc_name": "chrome",
+        "name": "Google Chrome",
+        "category": "網頁瀏覽器",
+        "icon": "🌐",
+        "count": 34,
+        "cpu_s": 28920.5,
+        "ram_mb": 5332.7,
+        "share_pct": 18.4,
+        "measured_wh": null
+      },
+      {
+        "proc_name": "parsecd",
+        "name": "Parsec 遠端串流服務 (parsecd)",
+        "category": "遠端桌面與編碼",
+        "icon": "🖥️",
+        "count": 2,
+        "cpu_s": 9468.0,
+        "ram_mb": 502.8,
+        "share_pct": 6.0,
+        "measured_wh": null
+      },
+      {
+        "proc_name": "explorer",
+        "name": "Windows 檔案總管 (explorer)",
+        "category": "系統桌面介面",
+        "icon": "📁",
+        "count": 1,
+        "cpu_s": 6613.4,
+        "ram_mb": 546.1,
+        "share_pct": 4.2,
+        "measured_wh": null
+      },
+      {
+        "proc_name": "audiodg",
+        "name": "Windows 音訊裝置圖形隔離 (audiodg)",
+        "category": "系統音訊引擎",
+        "icon": "🔊",
+        "count": 1,
+        "cpu_s": 5825.8,
+        "ram_mb": 26.6,
+        "share_pct": 3.7,
+        "measured_wh": null
+      },
+      {
+        "proc_name": "python",
+        "name": "Python 執行環境 (python)",
+        "category": "AI 與資料採集腳本",
+        "icon": "🐍",
+        "count": 2,
+        "cpu_s": 3903.1,
+        "ram_mb": 1116.8,
+        "share_pct": 2.5,
+        "measured_wh": null
+      },
+      {
+        "proc_name": "Purple",
+        "name": "NCSOFT Purple 啟動器",
+        "category": "遊戲啟動器",
+        "icon": "🟣",
+        "count": 1,
+        "cpu_s": 3488.9,
+        "ram_mb": 308.6,
+        "share_pct": 2.2,
+        "measured_wh": null
+      },
+      {
+        "proc_name": "nvcontainer",
+        "name": "NVIDIA Container",
+        "category": "顯示卡背景服務",
+        "icon": "🟢",
+        "count": 3,
+        "cpu_s": 3227.7,
+        "ram_mb": 135.1,
+        "share_pct": 2.1,
+        "measured_wh": null
+      },
+      {
+        "proc_name": "GCC",
+        "name": "GIGABYTE Control Center (GCC)",
+        "category": "硬體監控服務",
+        "icon": "⚙️",
+        "count": 1,
+        "cpu_s": 3142.2,
+        "ram_mb": 30.9,
+        "share_pct": 2.0,
+        "measured_wh": null
+      },
+      {
+        "proc_name": "TAXAgent4",
+        "name": "報稅憑證代理 (TAXAgent)",
+        "category": "系統常駐服務",
+        "icon": "🔐",
+        "count": 1,
+        "cpu_s": 2776.9,
+        "ram_mb": 7.0,
+        "share_pct": 1.8,
+        "measured_wh": null
+      },
+      {
+        "proc_name": "language_server",
+        "name": "language_server",
+        "category": "系統/背景程序",
+        "icon": "⚡",
+        "count": 1,
+        "cpu_s": 2273.1,
+        "ram_mb": 409.4,
+        "share_pct": 1.4,
+        "measured_wh": null
+      },
+      {
+        "proc_name": "WindowsTerminal",
+        "name": "WindowsTerminal",
+        "category": "系統/背景程序",
+        "icon": "⚡",
+        "count": 1,
+        "cpu_s": 2075.2,
+        "ram_mb": 255.0,
+        "share_pct": 1.3,
+        "measured_wh": null
+      }
+    ]
+  },
+  "history": {
+    "yearly_bars": [
+      {
+        "label": "01月",
+        "period": "2026/01",
+        "month_key": "2026-01",
+        "current_kwh": null,
+        "current_wh": null,
+        "prev_kwh": null,
+        "avg_w": null,
+        "peak_w": null,
+        "sample_count": 0
+      },
+      {
+        "label": "02月",
+        "period": "2026/02",
+        "month_key": "2026-02",
+        "current_kwh": null,
+        "current_wh": null,
+        "prev_kwh": null,
+        "avg_w": null,
+        "peak_w": null,
+        "sample_count": 0
+      },
+      {
+        "label": "03月",
+        "period": "2026/03",
+        "month_key": "2026-03",
+        "current_kwh": null,
+        "current_wh": null,
+        "prev_kwh": null,
+        "avg_w": null,
+        "peak_w": null,
+        "sample_count": 0
+      },
+      {
+        "label": "04月",
+        "period": "2026/04",
+        "month_key": "2026-04",
+        "current_kwh": null,
+        "current_wh": null,
+        "prev_kwh": null,
+        "avg_w": null,
+        "peak_w": null,
+        "sample_count": 0
+      },
+      {
+        "label": "05月",
+        "period": "2026/05",
+        "month_key": "2026-05",
+        "current_kwh": null,
+        "current_wh": null,
+        "prev_kwh": null,
+        "avg_w": null,
+        "peak_w": null,
+        "sample_count": 0
+      },
+      {
+        "label": "06月",
+        "period": "2026/06",
+        "month_key": "2026-06",
+        "current_kwh": null,
+        "current_wh": null,
+        "prev_kwh": null,
+        "avg_w": null,
+        "peak_w": null,
+        "sample_count": 0
+      },
+      {
+        "label": "07月",
+        "period": "2026/07",
+        "month_key": "2026-07",
+        "current_kwh": null,
+        "current_wh": null,
+        "prev_kwh": null,
+        "avg_w": null,
+        "peak_w": null,
+        "sample_count": 0
+      },
+      {
+        "label": "08月",
+        "period": "2026/08",
+        "month_key": "2026-08",
+        "current_kwh": null,
+        "current_wh": null,
+        "prev_kwh": null,
+        "avg_w": null,
+        "peak_w": null,
+        "sample_count": 0
+      },
+      {
+        "label": "09月",
+        "period": "2026/09",
+        "month_key": "2026-09",
+        "current_kwh": null,
+        "current_wh": null,
+        "prev_kwh": null,
+        "avg_w": null,
+        "peak_w": null,
+        "sample_count": 0
+      },
+      {
+        "label": "10月",
+        "period": "2026/10",
+        "month_key": "2026-10",
+        "current_kwh": null,
+        "current_wh": null,
+        "prev_kwh": null,
+        "avg_w": null,
+        "peak_w": null,
+        "sample_count": 0
+      },
+      {
+        "label": "11月",
+        "period": "2026/11",
+        "month_key": "2026-11",
+        "current_kwh": 0.0287,
+        "current_wh": 28.72,
+        "prev_kwh": null,
+        "avg_w": 28.72,
+        "peak_w": 29.98,
+        "sample_count": 3
+      },
+      {
+        "label": "12月",
+        "period": "2026/12",
+        "month_key": "2026-12",
+        "current_kwh": null,
+        "current_wh": null,
+        "prev_kwh": null,
+        "avg_w": null,
+        "peak_w": null,
+        "sample_count": 0
+      }
+    ],
+    "daily_bars": [
+      {
+        "label": "10/25",
+        "period": "2026-10-25",
+        "date_key": "2026-10-25",
+        "current_kwh": null,
+        "current_wh": null,
+        "prev_kwh": null,
+        "avg_w": null,
+        "peak_w": null,
+        "avg_cpu_w": null,
+        "avg_gpu_w": null,
+        "avg_cpu_load_pct": null,
+        "avg_gpu_temp_c": null,
+        "avg_mb_temp_c": null,
+        "sample_count": 0
+      },
+      {
+        "label": "10/26",
+        "period": "2026-10-26",
+        "date_key": "2026-10-26",
+        "current_kwh": null,
+        "current_wh": null,
+        "prev_kwh": null,
+        "avg_w": null,
+        "peak_w": null,
+        "avg_cpu_w": null,
+        "avg_gpu_w": null,
+        "avg_cpu_load_pct": null,
+        "avg_gpu_temp_c": null,
+        "avg_mb_temp_c": null,
+        "sample_count": 0
+      },
+      {
+        "label": "10/27",
+        "period": "2026-10-27",
+        "date_key": "2026-10-27",
+        "current_kwh": null,
+        "current_wh": null,
+        "prev_kwh": null,
+        "avg_w": null,
+        "peak_w": null,
+        "avg_cpu_w": null,
+        "avg_gpu_w": null,
+        "avg_cpu_load_pct": null,
+        "avg_gpu_temp_c": null,
+        "avg_mb_temp_c": null,
+        "sample_count": 0
+      },
+      {
+        "label": "10/28",
+        "period": "2026-10-28",
+        "date_key": "2026-10-28",
+        "current_kwh": null,
+        "current_wh": null,
+        "prev_kwh": null,
+        "avg_w": null,
+        "peak_w": null,
+        "avg_cpu_w": null,
+        "avg_gpu_w": null,
+        "avg_cpu_load_pct": null,
+        "avg_gpu_temp_c": null,
+        "avg_mb_temp_c": null,
+        "sample_count": 0
+      },
+      {
+        "label": "10/29",
+        "period": "2026-10-29",
+        "date_key": "2026-10-29",
+        "current_kwh": null,
+        "current_wh": null,
+        "prev_kwh": null,
+        "avg_w": null,
+        "peak_w": null,
+        "avg_cpu_w": null,
+        "avg_gpu_w": null,
+        "avg_cpu_load_pct": null,
+        "avg_gpu_temp_c": null,
+        "avg_mb_temp_c": null,
+        "sample_count": 0
+      },
+      {
+        "label": "10/30",
+        "period": "2026-10-30",
+        "date_key": "2026-10-30",
+        "current_kwh": null,
+        "current_wh": null,
+        "prev_kwh": null,
+        "avg_w": null,
+        "peak_w": null,
+        "avg_cpu_w": null,
+        "avg_gpu_w": null,
+        "avg_cpu_load_pct": null,
+        "avg_gpu_temp_c": null,
+        "avg_mb_temp_c": null,
+        "sample_count": 0
+      },
+      {
+        "label": "10/31",
+        "period": "2026-10-31",
+        "date_key": "2026-10-31",
+        "current_kwh": null,
+        "current_wh": null,
+        "prev_kwh": null,
+        "avg_w": null,
+        "peak_w": null,
+        "avg_cpu_w": null,
+        "avg_gpu_w": null,
+        "avg_cpu_load_pct": null,
+        "avg_gpu_temp_c": null,
+        "avg_mb_temp_c": null,
+        "sample_count": 0
+      },
+      {
+        "label": "11/01",
+        "period": "2026-11-01",
+        "date_key": "2026-11-01",
+        "current_kwh": null,
+        "current_wh": null,
+        "prev_kwh": null,
+        "avg_w": null,
+        "peak_w": null,
+        "avg_cpu_w": null,
+        "avg_gpu_w": null,
+        "avg_cpu_load_pct": null,
+        "avg_gpu_temp_c": null,
+        "avg_mb_temp_c": null,
+        "sample_count": 0
+      },
+      {
+        "label": "11/02",
+        "period": "2026-11-02",
+        "date_key": "2026-11-02",
+        "current_kwh": null,
+        "current_wh": null,
+        "prev_kwh": null,
+        "avg_w": null,
+        "peak_w": null,
+        "avg_cpu_w": null,
+        "avg_gpu_w": null,
+        "avg_cpu_load_pct": null,
+        "avg_gpu_temp_c": null,
+        "avg_mb_temp_c": null,
+        "sample_count": 0
+      },
+      {
+        "label": "11/03",
+        "period": "2026-11-03",
+        "date_key": "2026-11-03",
+        "current_kwh": null,
+        "current_wh": null,
+        "prev_kwh": null,
+        "avg_w": null,
+        "peak_w": null,
+        "avg_cpu_w": null,
+        "avg_gpu_w": null,
+        "avg_cpu_load_pct": null,
+        "avg_gpu_temp_c": null,
+        "avg_mb_temp_c": null,
+        "sample_count": 0
+      },
+      {
+        "label": "11/04",
+        "period": "2026-11-04",
+        "date_key": "2026-11-04",
+        "current_kwh": null,
+        "current_wh": null,
+        "prev_kwh": null,
+        "avg_w": null,
+        "peak_w": null,
+        "avg_cpu_w": null,
+        "avg_gpu_w": null,
+        "avg_cpu_load_pct": null,
+        "avg_gpu_temp_c": null,
+        "avg_mb_temp_c": null,
+        "sample_count": 0
+      },
+      {
+        "label": "11/05",
+        "period": "2026-11-05",
+        "date_key": "2026-11-05",
+        "current_kwh": null,
+        "current_wh": null,
+        "prev_kwh": null,
+        "avg_w": null,
+        "peak_w": null,
+        "avg_cpu_w": null,
+        "avg_gpu_w": null,
+        "avg_cpu_load_pct": null,
+        "avg_gpu_temp_c": null,
+        "avg_mb_temp_c": null,
+        "sample_count": 0
+      },
+      {
+        "label": "11/06",
+        "period": "2026-11-06",
+        "date_key": "2026-11-06",
+        "current_kwh": null,
+        "current_wh": null,
+        "prev_kwh": null,
+        "avg_w": null,
+        "peak_w": null,
+        "avg_cpu_w": null,
+        "avg_gpu_w": null,
+        "avg_cpu_load_pct": null,
+        "avg_gpu_temp_c": null,
+        "avg_mb_temp_c": null,
+        "sample_count": 0
+      },
+      {
+        "label": "11/07",
+        "period": "2026-11-07",
+        "date_key": "2026-11-07",
+        "current_kwh": 0.0287,
+        "current_wh": 28.72,
+        "prev_kwh": null,
+        "avg_w": 28.72,
+        "peak_w": 29.98,
+        "avg_cpu_w": 20.9,
+        "avg_gpu_w": 7.82,
+        "avg_cpu_load_pct": 14.7,
+        "avg_gpu_temp_c": 36.7,
+        "avg_mb_temp_c": 27.9,
+        "sample_count": 3
+      }
+    ],
+    "hourly_bars": [
+      {
+        "label": "13",
+        "period": "2026-11-06 13:00",
+        "hour_key": "2026-11-06 13:00",
+        "watts": null,
+        "peak_w": null,
+        "min_w": null,
+        "measured_wh": null,
+        "current_kwh": null,
+        "prev_kwh": null,
+        "cpu_w": null,
+        "gpu_w": null,
+        "ac_wall_w": null,
+        "cpu_load_pct": null,
+        "gpu_temp_c": null,
+        "mb_temp_c": null,
+        "battery_pct": null,
+        "charging": null,
+        "sample_count": 0,
+        "first_sample_at": null,
+        "last_sample_at": null
+      },
+      {
+        "label": "14",
+        "period": "2026-11-06 14:00",
+        "hour_key": "2026-11-06 14:00",
+        "watts": null,
+        "peak_w": null,
+        "min_w": null,
+        "measured_wh": null,
+        "current_kwh": null,
+        "prev_kwh": null,
+        "cpu_w": null,
+        "gpu_w": null,
+        "ac_wall_w": null,
+        "cpu_load_pct": null,
+        "gpu_temp_c": null,
+        "mb_temp_c": null,
+        "battery_pct": null,
+        "charging": null,
+        "sample_count": 0,
+        "first_sample_at": null,
+        "last_sample_at": null
+      },
+      {
+        "label": "15",
+        "period": "2026-11-06 15:00",
+        "hour_key": "2026-11-06 15:00",
+        "watts": null,
+        "peak_w": null,
+        "min_w": null,
+        "measured_wh": null,
+        "current_kwh": null,
+        "prev_kwh": null,
+        "cpu_w": null,
+        "gpu_w": null,
+        "ac_wall_w": null,
+        "cpu_load_pct": null,
+        "gpu_temp_c": null,
+        "mb_temp_c": null,
+        "battery_pct": null,
+        "charging": null,
+        "sample_count": 0,
+        "first_sample_at": null,
+        "last_sample_at": null
+      },
+      {
+        "label": "16",
+        "period": "2026-11-06 16:00",
+        "hour_key": "2026-11-06 16:00",
+        "watts": null,
+        "peak_w": null,
+        "min_w": null,
+        "measured_wh": null,
+        "current_kwh": null,
+        "prev_kwh": null,
+        "cpu_w": null,
+        "gpu_w": null,
+        "ac_wall_w": null,
+        "cpu_load_pct": null,
+        "gpu_temp_c": null,
+        "mb_temp_c": null,
+        "battery_pct": null,
+        "charging": null,
+        "sample_count": 0,
+        "first_sample_at": null,
+        "last_sample_at": null
+      },
+      {
+        "label": "17",
+        "period": "2026-11-06 17:00",
+        "hour_key": "2026-11-06 17:00",
+        "watts": null,
+        "peak_w": null,
+        "min_w": null,
+        "measured_wh": null,
+        "current_kwh": null,
+        "prev_kwh": null,
+        "cpu_w": null,
+        "gpu_w": null,
+        "ac_wall_w": null,
+        "cpu_load_pct": null,
+        "gpu_temp_c": null,
+        "mb_temp_c": null,
+        "battery_pct": null,
+        "charging": null,
+        "sample_count": 0,
+        "first_sample_at": null,
+        "last_sample_at": null
+      },
+      {
+        "label": "18",
+        "period": "2026-11-06 18:00",
+        "hour_key": "2026-11-06 18:00",
+        "watts": null,
+        "peak_w": null,
+        "min_w": null,
+        "measured_wh": null,
+        "current_kwh": null,
+        "prev_kwh": null,
+        "cpu_w": null,
+        "gpu_w": null,
+        "ac_wall_w": null,
+        "cpu_load_pct": null,
+        "gpu_temp_c": null,
+        "mb_temp_c": null,
+        "battery_pct": null,
+        "charging": null,
+        "sample_count": 0,
+        "first_sample_at": null,
+        "last_sample_at": null
+      },
+      {
+        "label": "19",
+        "period": "2026-11-06 19:00",
+        "hour_key": "2026-11-06 19:00",
+        "watts": null,
+        "peak_w": null,
+        "min_w": null,
+        "measured_wh": null,
+        "current_kwh": null,
+        "prev_kwh": null,
+        "cpu_w": null,
+        "gpu_w": null,
+        "ac_wall_w": null,
+        "cpu_load_pct": null,
+        "gpu_temp_c": null,
+        "mb_temp_c": null,
+        "battery_pct": null,
+        "charging": null,
+        "sample_count": 0,
+        "first_sample_at": null,
+        "last_sample_at": null
+      },
+      {
+        "label": "20",
+        "period": "2026-11-06 20:00",
+        "hour_key": "2026-11-06 20:00",
+        "watts": null,
+        "peak_w": null,
+        "min_w": null,
+        "measured_wh": null,
+        "current_kwh": null,
+        "prev_kwh": null,
+        "cpu_w": null,
+        "gpu_w": null,
+        "ac_wall_w": null,
+        "cpu_load_pct": null,
+        "gpu_temp_c": null,
+        "mb_temp_c": null,
+        "battery_pct": null,
+        "charging": null,
+        "sample_count": 0,
+        "first_sample_at": null,
+        "last_sample_at": null
+      },
+      {
+        "label": "21",
+        "period": "2026-11-06 21:00",
+        "hour_key": "2026-11-06 21:00",
+        "watts": null,
+        "peak_w": null,
+        "min_w": null,
+        "measured_wh": null,
+        "current_kwh": null,
+        "prev_kwh": null,
+        "cpu_w": null,
+        "gpu_w": null,
+        "ac_wall_w": null,
+        "cpu_load_pct": null,
+        "gpu_temp_c": null,
+        "mb_temp_c": null,
+        "battery_pct": null,
+        "charging": null,
+        "sample_count": 0,
+        "first_sample_at": null,
+        "last_sample_at": null
+      },
+      {
+        "label": "22",
+        "period": "2026-11-06 22:00",
+        "hour_key": "2026-11-06 22:00",
+        "watts": null,
+        "peak_w": null,
+        "min_w": null,
+        "measured_wh": null,
+        "current_kwh": null,
+        "prev_kwh": null,
+        "cpu_w": null,
+        "gpu_w": null,
+        "ac_wall_w": null,
+        "cpu_load_pct": null,
+        "gpu_temp_c": null,
+        "mb_temp_c": null,
+        "battery_pct": null,
+        "charging": null,
+        "sample_count": 0,
+        "first_sample_at": null,
+        "last_sample_at": null
+      },
+      {
+        "label": "23",
+        "period": "2026-11-06 23:00",
+        "hour_key": "2026-11-06 23:00",
+        "watts": null,
+        "peak_w": null,
+        "min_w": null,
+        "measured_wh": null,
+        "current_kwh": null,
+        "prev_kwh": null,
+        "cpu_w": null,
+        "gpu_w": null,
+        "ac_wall_w": null,
+        "cpu_load_pct": null,
+        "gpu_temp_c": null,
+        "mb_temp_c": null,
+        "battery_pct": null,
+        "charging": null,
+        "sample_count": 0,
+        "first_sample_at": null,
+        "last_sample_at": null
+      },
+      {
+        "label": "00",
+        "period": "2026-11-07 00:00",
+        "hour_key": "2026-11-07 00:00",
+        "watts": null,
+        "peak_w": null,
+        "min_w": null,
+        "measured_wh": null,
+        "current_kwh": null,
+        "prev_kwh": null,
+        "cpu_w": null,
+        "gpu_w": null,
+        "ac_wall_w": null,
+        "cpu_load_pct": null,
+        "gpu_temp_c": null,
+        "mb_temp_c": null,
+        "battery_pct": null,
+        "charging": null,
+        "sample_count": 0,
+        "first_sample_at": null,
+        "last_sample_at": null
+      },
+      {
+        "label": "01",
+        "period": "2026-11-07 01:00",
+        "hour_key": "2026-11-07 01:00",
+        "watts": null,
+        "peak_w": null,
+        "min_w": null,
+        "measured_wh": null,
+        "current_kwh": null,
+        "prev_kwh": null,
+        "cpu_w": null,
+        "gpu_w": null,
+        "ac_wall_w": null,
+        "cpu_load_pct": null,
+        "gpu_temp_c": null,
+        "mb_temp_c": null,
+        "battery_pct": null,
+        "charging": null,
+        "sample_count": 0,
+        "first_sample_at": null,
+        "last_sample_at": null
+      },
+      {
+        "label": "02",
+        "period": "2026-11-07 02:00",
+        "hour_key": "2026-11-07 02:00",
+        "watts": null,
+        "peak_w": null,
+        "min_w": null,
+        "measured_wh": null,
+        "current_kwh": null,
+        "prev_kwh": null,
+        "cpu_w": null,
+        "gpu_w": null,
+        "ac_wall_w": null,
+        "cpu_load_pct": null,
+        "gpu_temp_c": null,
+        "mb_temp_c": null,
+        "battery_pct": null,
+        "charging": null,
+        "sample_count": 0,
+        "first_sample_at": null,
+        "last_sample_at": null
+      },
+      {
+        "label": "03",
+        "period": "2026-11-07 03:00",
+        "hour_key": "2026-11-07 03:00",
+        "watts": null,
+        "peak_w": null,
+        "min_w": null,
+        "measured_wh": null,
+        "current_kwh": null,
+        "prev_kwh": null,
+        "cpu_w": null,
+        "gpu_w": null,
+        "ac_wall_w": null,
+        "cpu_load_pct": null,
+        "gpu_temp_c": null,
+        "mb_temp_c": null,
+        "battery_pct": null,
+        "charging": null,
+        "sample_count": 0,
+        "first_sample_at": null,
+        "last_sample_at": null
+      },
+      {
+        "label": "04",
+        "period": "2026-11-07 04:00",
+        "hour_key": "2026-11-07 04:00",
+        "watts": null,
+        "peak_w": null,
+        "min_w": null,
+        "measured_wh": null,
+        "current_kwh": null,
+        "prev_kwh": null,
+        "cpu_w": null,
+        "gpu_w": null,
+        "ac_wall_w": null,
+        "cpu_load_pct": null,
+        "gpu_temp_c": null,
+        "mb_temp_c": null,
+        "battery_pct": null,
+        "charging": null,
+        "sample_count": 0,
+        "first_sample_at": null,
+        "last_sample_at": null
+      },
+      {
+        "label": "05",
+        "period": "2026-11-07 05:00",
+        "hour_key": "2026-11-07 05:00",
+        "watts": null,
+        "peak_w": null,
+        "min_w": null,
+        "measured_wh": null,
+        "current_kwh": null,
+        "prev_kwh": null,
+        "cpu_w": null,
+        "gpu_w": null,
+        "ac_wall_w": null,
+        "cpu_load_pct": null,
+        "gpu_temp_c": null,
+        "mb_temp_c": null,
+        "battery_pct": null,
+        "charging": null,
+        "sample_count": 0,
+        "first_sample_at": null,
+        "last_sample_at": null
+      },
+      {
+        "label": "06",
+        "period": "2026-11-07 06:00",
+        "hour_key": "2026-11-07 06:00",
+        "watts": null,
+        "peak_w": null,
+        "min_w": null,
+        "measured_wh": null,
+        "current_kwh": null,
+        "prev_kwh": null,
+        "cpu_w": null,
+        "gpu_w": null,
+        "ac_wall_w": null,
+        "cpu_load_pct": null,
+        "gpu_temp_c": null,
+        "mb_temp_c": null,
+        "battery_pct": null,
+        "charging": null,
+        "sample_count": 0,
+        "first_sample_at": null,
+        "last_sample_at": null
+      },
+      {
+        "label": "07",
+        "period": "2026-11-07 07:00",
+        "hour_key": "2026-11-07 07:00",
+        "watts": null,
+        "peak_w": null,
+        "min_w": null,
+        "measured_wh": null,
+        "current_kwh": null,
+        "prev_kwh": null,
+        "cpu_w": null,
+        "gpu_w": null,
+        "ac_wall_w": null,
+        "cpu_load_pct": null,
+        "gpu_temp_c": null,
+        "mb_temp_c": null,
+        "battery_pct": null,
+        "charging": null,
+        "sample_count": 0,
+        "first_sample_at": null,
+        "last_sample_at": null
+      },
+      {
+        "label": "08",
+        "period": "2026-11-07 08:00",
+        "hour_key": "2026-11-07 08:00",
+        "watts": null,
+        "peak_w": null,
+        "min_w": null,
+        "measured_wh": null,
+        "current_kwh": null,
+        "prev_kwh": null,
+        "cpu_w": null,
+        "gpu_w": null,
+        "ac_wall_w": null,
+        "cpu_load_pct": null,
+        "gpu_temp_c": null,
+        "mb_temp_c": null,
+        "battery_pct": null,
+        "charging": null,
+        "sample_count": 0,
+        "first_sample_at": null,
+        "last_sample_at": null
+      },
+      {
+        "label": "09",
+        "period": "2026-11-07 09:00",
+        "hour_key": "2026-11-07 09:00",
+        "watts": null,
+        "peak_w": null,
+        "min_w": null,
+        "measured_wh": null,
+        "current_kwh": null,
+        "prev_kwh": null,
+        "cpu_w": null,
+        "gpu_w": null,
+        "ac_wall_w": null,
+        "cpu_load_pct": null,
+        "gpu_temp_c": null,
+        "mb_temp_c": null,
+        "battery_pct": null,
+        "charging": null,
+        "sample_count": 0,
+        "first_sample_at": null,
+        "last_sample_at": null
+      },
+      {
+        "label": "10",
+        "period": "2026-11-07 10:00",
+        "hour_key": "2026-11-07 10:00",
+        "watts": null,
+        "peak_w": null,
+        "min_w": null,
+        "measured_wh": null,
+        "current_kwh": null,
+        "prev_kwh": null,
+        "cpu_w": null,
+        "gpu_w": null,
+        "ac_wall_w": null,
+        "cpu_load_pct": null,
+        "gpu_temp_c": null,
+        "mb_temp_c": null,
+        "battery_pct": null,
+        "charging": null,
+        "sample_count": 0,
+        "first_sample_at": null,
+        "last_sample_at": null
+      },
+      {
+        "label": "11",
+        "period": "2026-11-07 11:00",
+        "hour_key": "2026-11-07 11:00",
+        "watts": null,
+        "peak_w": null,
+        "min_w": null,
+        "measured_wh": null,
+        "current_kwh": null,
+        "prev_kwh": null,
+        "cpu_w": null,
+        "gpu_w": null,
+        "ac_wall_w": null,
+        "cpu_load_pct": null,
+        "gpu_temp_c": null,
+        "mb_temp_c": null,
+        "battery_pct": null,
+        "charging": null,
+        "sample_count": 0,
+        "first_sample_at": null,
+        "last_sample_at": null
+      },
+      {
+        "label": "12",
+        "period": "2026-11-07 12:00",
+        "hour_key": "2026-11-07 12:00",
+        "watts": 28.72,
+        "peak_w": 29.98,
+        "min_w": 26.26,
+        "measured_wh": 28.72,
+        "current_kwh": 0.0287,
+        "prev_kwh": null,
+        "cpu_w": 20.9,
+        "gpu_w": 7.82,
+        "ac_wall_w": null,
+        "cpu_load_pct": 14.7,
+        "gpu_temp_c": 36.7,
+        "mb_temp_c": 27.9,
+        "battery_pct": null,
+        "charging": null,
+        "sample_count": 3,
+        "first_sample_at": "2026-11-07 12:12:56",
+        "last_sample_at": "2026-11-07 12:17:45"
+      }
+    ]
+  },
+  "sql_tables": {
+    "hourly_logs": [
+      {
+        "hour_key": "2026-11-07 12:00",
+        "date_key": "2026-11-07",
+        "month_key": "2026-11",
+        "year_key": "2026",
+        "avg_sensor_w": 28.72,
+        "peak_sensor_w": 29.98,
+        "min_sensor_w": 26.26,
+        "measured_wh": 28.72,
+        "avg_cpu_w": 20.9,
+        "avg_gpu_w": 7.82,
+        "ac_wall_w": null,
+        "avg_cpu_load_pct": 14.7,
+        "avg_gpu_temp_c": 36.7,
+        "avg_mb_temp_c": 27.9,
+        "battery_pct": null,
+        "charging": null,
+        "sample_count": 3,
+        "first_sample_at": "2026-11-07 12:12:56",
+        "last_sample_at": "2026-11-07 12:17:45"
+      }
+    ],
+    "sensor_samples": [
+      {
+        "id": 3,
+        "sampled_at": "2026-11-07 12:17:45",
+        "hour_key": "2026-11-07 12:00",
+        "date_key": "2026-11-07",
+        "month_key": "2026-11",
+        "year_key": "2026",
+        "hostname": "SUN_PC",
+        "power_scheme": "平衡 (Balanced)",
+        "cpu_pkg_w": 22.48,
+        "cpu_pp0_w": 13.3,
+        "cpu_uncore_w": 9.18,
+        "cpu_dram_w": null,
+        "cpu_load_pct": 16.7,
+        "cpu_clock_mhz": 3300,
+        "cpu_temp_c": null,
+        "gpu_power_w": 7.5,
+        "gpu_limit_w": 171.0,
+        "gpu_temp_c": 37.0,
+        "gpu_load_pct": 4.0,
+        "gpu_vram_mb": 2398,
+        "gpu_vram_total_mb": 16311,
+        "gpu_fan_pct": 0,
+        "gpu_pstate": "P8",
+        "ram_used_gb": 29.51,
+        "ram_total_gb": 63.46,
+        "ram_used_pct": 46.5,
+        "ram_voltage_v": 1.1,
+        "ram_power_w": null,
+        "ram_temp_c": null,
+        "disk_used_gb": 3793.7,
+        "disk_total_gb": 6183.3,
+        "disk_count": 9,
+        "disk_power_w": null,
+        "disk_temp_c": null,
+        "mb_temp_c": 27.9,
+        "mb_power_w": null,
+        "measured_sensor_total_w": 29.98,
+        "ac_wall_w": null,
+        "battery_present": 0,
+        "battery_pct": null,
+        "battery_charging": null
+      },
+      {
+        "id": 2,
+        "sampled_at": "2026-11-07 12:17:37",
+        "hour_key": "2026-11-07 12:00",
+        "date_key": "2026-11-07",
+        "month_key": "2026-11",
+        "year_key": "2026",
+        "hostname": "SUN_PC",
+        "power_scheme": "平衡 (Balanced)",
+        "cpu_pkg_w": 22.28,
+        "cpu_pp0_w": 13.21,
+        "cpu_uncore_w": 9.07,
+        "cpu_dram_w": null,
+        "cpu_load_pct": 14.9,
+        "cpu_clock_mhz": 3300,
+        "cpu_temp_c": null,
+        "gpu_power_w": 7.64,
+        "gpu_limit_w": 171.0,
+        "gpu_temp_c": 37.0,
+        "gpu_load_pct": 4.0,
+        "gpu_vram_mb": 2398,
+        "gpu_vram_total_mb": 16311,
+        "gpu_fan_pct": 0,
+        "gpu_pstate": "P8",
+        "ram_used_gb": 29.48,
+        "ram_total_gb": 63.46,
+        "ram_used_pct": 46.5,
+        "ram_voltage_v": 1.1,
+        "ram_power_w": null,
+        "ram_temp_c": null,
+        "disk_used_gb": 3793.7,
+        "disk_total_gb": 6183.3,
+        "disk_count": 9,
+        "disk_power_w": null,
+        "disk_temp_c": null,
+        "mb_temp_c": 27.9,
+        "mb_power_w": null,
+        "measured_sensor_total_w": 29.92,
+        "ac_wall_w": null,
+        "battery_present": 0,
+        "battery_pct": null,
+        "battery_charging": null
+      },
+      {
+        "id": 1,
+        "sampled_at": "2026-11-07 12:12:56",
+        "hour_key": "2026-11-07 12:00",
+        "date_key": "2026-11-07",
+        "month_key": "2026-11",
+        "year_key": "2026",
+        "hostname": "SUN_PC",
+        "power_scheme": "平衡 (Balanced)",
+        "cpu_pkg_w": 17.93,
+        "cpu_pp0_w": 8.88,
+        "cpu_uncore_w": 9.05,
+        "cpu_dram_w": null,
+        "cpu_load_pct": 12.6,
+        "cpu_clock_mhz": 3300,
+        "cpu_temp_c": null,
+        "gpu_power_w": 8.33,
+        "gpu_limit_w": 171.0,
+        "gpu_temp_c": 36.0,
+        "gpu_load_pct": 5.0,
+        "gpu_vram_mb": 2397,
+        "gpu_vram_total_mb": 16311,
+        "gpu_fan_pct": 0,
+        "gpu_pstate": "P8",
+        "ram_used_gb": 29.49,
+        "ram_total_gb": 63.46,
+        "ram_used_pct": 46.5,
+        "ram_voltage_v": 1.1,
+        "ram_power_w": null,
+        "ram_temp_c": null,
+        "disk_used_gb": 3793.7,
+        "disk_total_gb": 6183.3,
+        "disk_count": 9,
+        "disk_power_w": null,
+        "disk_temp_c": null,
+        "mb_temp_c": 27.9,
+        "mb_power_w": null,
+        "measured_sensor_total_w": 26.26,
+        "ac_wall_w": null,
+        "battery_present": 0,
+        "battery_pct": null,
+        "battery_charging": null
+      }
+    ],
+    "app_energy_logs": [
+      {
+        "proc_name": "L2.bin",
+        "display_name": "Lineage II 天堂2 (L2.bin)",
+        "category": "遊戲程序",
+        "icon": "🎮",
+        "proc_count": 3,
+        "cpu_seconds": 85279.2,
+        "ram_mb": 4042.1,
+        "cpu_share_pct": 54.3,
+        "measured_app_wh": null,
+        "updated_at": "2026-11-07 12:17:45"
+      },
+      {
+        "proc_name": "chrome",
+        "display_name": "Google Chrome",
+        "category": "網頁瀏覽器",
+        "icon": "🌐",
+        "proc_count": 34,
+        "cpu_seconds": 28920.5,
+        "ram_mb": 5332.7,
+        "cpu_share_pct": 18.4,
+        "measured_app_wh": null,
+        "updated_at": "2026-11-07 12:17:45"
+      },
+      {
+        "proc_name": "parsecd",
+        "display_name": "Parsec 遠端串流服務 (parsecd)",
+        "category": "遠端桌面與編碼",
+        "icon": "🖥️",
+        "proc_count": 2,
+        "cpu_seconds": 9468.0,
+        "ram_mb": 502.8,
+        "cpu_share_pct": 6.0,
+        "measured_app_wh": null,
+        "updated_at": "2026-11-07 12:17:45"
+      },
+      {
+        "proc_name": "explorer",
+        "display_name": "Windows 檔案總管 (explorer)",
+        "category": "系統桌面介面",
+        "icon": "📁",
+        "proc_count": 1,
+        "cpu_seconds": 6613.4,
+        "ram_mb": 546.1,
+        "cpu_share_pct": 4.2,
+        "measured_app_wh": null,
+        "updated_at": "2026-11-07 12:17:45"
+      },
+      {
+        "proc_name": "audiodg",
+        "display_name": "Windows 音訊裝置圖形隔離 (audiodg)",
+        "category": "系統音訊引擎",
+        "icon": "🔊",
+        "proc_count": 1,
+        "cpu_seconds": 5825.8,
+        "ram_mb": 26.6,
+        "cpu_share_pct": 3.7,
+        "measured_app_wh": null,
+        "updated_at": "2026-11-07 12:17:45"
+      },
+      {
+        "proc_name": "python",
+        "display_name": "Python 執行環境 (python)",
+        "category": "AI 與資料採集腳本",
+        "icon": "🐍",
+        "proc_count": 2,
+        "cpu_seconds": 3903.1,
+        "ram_mb": 1116.8,
+        "cpu_share_pct": 2.5,
+        "measured_app_wh": null,
+        "updated_at": "2026-11-07 12:17:45"
+      },
+      {
+        "proc_name": "Purple",
+        "display_name": "NCSOFT Purple 啟動器",
+        "category": "遊戲啟動器",
+        "icon": "🟣",
+        "proc_count": 1,
+        "cpu_seconds": 3488.9,
+        "ram_mb": 308.6,
+        "cpu_share_pct": 2.2,
+        "measured_app_wh": null,
+        "updated_at": "2026-11-07 12:17:45"
+      },
+      {
+        "proc_name": "nvcontainer",
+        "display_name": "NVIDIA Container",
+        "category": "顯示卡背景服務",
+        "icon": "🟢",
+        "proc_count": 3,
+        "cpu_seconds": 3227.7,
+        "ram_mb": 135.1,
+        "cpu_share_pct": 2.1,
+        "measured_app_wh": null,
+        "updated_at": "2026-11-07 12:17:45"
+      },
+      {
+        "proc_name": "GCC",
+        "display_name": "GIGABYTE Control Center (GCC)",
+        "category": "硬體監控服務",
+        "icon": "⚙️",
+        "proc_count": 1,
+        "cpu_seconds": 3142.2,
+        "ram_mb": 30.9,
+        "cpu_share_pct": 2.0,
+        "measured_app_wh": null,
+        "updated_at": "2026-11-07 12:17:45"
+      },
+      {
+        "proc_name": "TAXAgent4",
+        "display_name": "報稅憑證代理 (TAXAgent)",
+        "category": "系統常駐服務",
+        "icon": "🔐",
+        "proc_count": 1,
+        "cpu_seconds": 2776.9,
+        "ram_mb": 7.0,
+        "cpu_share_pct": 1.8,
+        "measured_app_wh": null,
+        "updated_at": "2026-11-07 12:17:45"
+      },
+      {
+        "proc_name": "language_server",
+        "display_name": "language_server",
+        "category": "系統/背景程序",
+        "icon": "⚡",
+        "proc_count": 1,
+        "cpu_seconds": 2273.1,
+        "ram_mb": 409.4,
+        "cpu_share_pct": 1.4,
+        "measured_app_wh": null,
+        "updated_at": "2026-11-07 12:17:45"
+      },
+      {
+        "proc_name": "WindowsTerminal",
+        "display_name": "WindowsTerminal",
+        "category": "系統/背景程序",
+        "icon": "⚡",
+        "proc_count": 1,
+        "cpu_seconds": 2075.2,
+        "ram_mb": 255.0,
+        "cpu_share_pct": 1.3,
+        "measured_app_wh": null,
+        "updated_at": "2026-11-07 12:17:45"
+      }
+    ],
+    "control_logs": []
+  }
+};
+
+    // Unmeasured node profile template (strictly '--' / null for nodes without active hardware agents)
+    function getUnmeasuredNodeData(nodeName, isLaptop) {
+      return {
+        timestamp: "--",
+        hostname: nodeName,
+        is_laptop: isLaptop,
+        battery: {
+          present: isLaptop,
+          percent: null,
+          charging: null,
+          status_text: "尚未接入該節點硬體感測器 (--)",
+          last_full_charge: null
+        },
+        power_mode: "unknown",
+        power_mode_name: "--",
+        tariff_ntd_per_kwh: cloudData.live?.tariff_ntd_per_kwh || 4.5,
+        ambient_temp_c: null,
+        measured_sensor_total_w: null,
+        ac_wall_w: null,
         components: {
-          cpu: { name: "Apple M系列 Pro 晶片", power_w: 4.2, temp_c: 38, status: "on", sub: "能效核心為主 · 功耗極低" },
-          gpu: { name: "Apple Metal 圖形核心", power_w: 1.1, temp_c: 36, status: "on", sub: "ProMotion 動態更新率省電中" },
-          ram: { name: "Unified Memory 統一記憶體", power_w: 1.5, temp_c: 35, status: "on", sub: "記憶體壓縮最佳化" },
-          disk: { name: "Apple NVMe 儲存裝置", power_w: 0.6, temp_c: 33, status: "on", sub: "休眠待命" },
-          mb_vrm_fan: { name: "Liquid Retina XDR 顯示器 + 無線", power_w: 5.1, temp_c: 32, status: "on", sub: "風扇 0 RPM 完全停轉" },
-          strata: { name: "Claude / Codex 遠端連線", power_w: 0.0, temp_c: 32, status: "on", sub: "連往 SUN_PC:8080" }
-        }
+          cpu: { name: "CPU 處理器", power_w: null, cores_w: null, uncore_w: null, load_pct: null, clock_mhz: null, temp_c: null, status: "off" },
+          gpu: { name: "GPU 顯示卡", power_w: null, limit_w: null, load_pct: null, temp_c: null, pstate: null, fan_pct: null, vram_mb: null, vram_total_mb: null, status: "off" },
+          ram: { name: "系統記憶體 (RAM)", power_w: null, used_gb: null, total_gb: null, used_pct: null, voltage_v: null, temp_c: null, status: "off" },
+          disk: { name: "儲存磁碟陣列", power_w: null, used_gb: null, total_gb: null, used_pct: null, active_drives: null, temp_c: null, status: "off" },
+          mb_vrm_fan: { name: "主機板與散熱系統", power_w: null, temp_c: null, status: "off" },
+          ai_services: { name: "AI 推理服務", power_w: null, temp_c: null, ollama_on: false, strata_on: false, status: "off" }
+        },
+        top_apps: []
+      };
+    }
+
+    function getActiveData() {
+      if (currentNode === 'sun_pc') {
+        return cloudData;
       }
-    };
+      const names = {
+        win_laptop: ["Windows 筆電節點 (未連線)", true],
+        mac_mini: ["Mac mini 節點 (未連線)", false],
+        macbook: ["MacBook Pro 節點 (未連線)", true]
+      };
+      const [nName, isLap] = names[currentNode] || ["未知節點", false];
+      return {
+        generated_at: "--",
+        live: getUnmeasuredNodeData(nName, isLap),
+        history: {
+          yearly_bars: (cloudData.history.yearly_bars || []).map(b => ({ ...b, current_kwh: null, current_wh: null, prev_kwh: null, avg_w: null, peak_w: null, sample_count: 0 })),
+          daily_bars: (cloudData.history.daily_bars || []).map(b => ({ ...b, current_kwh: null, current_wh: null, prev_kwh: null, avg_w: null, peak_w: null, avg_cpu_w: null, avg_gpu_w: null, avg_cpu_load_pct: null, sample_count: 0 })),
+          hourly_bars: (cloudData.history.hourly_bars || []).map(b => ({ ...b, watts: null, peak_w: null, measured_wh: null, current_kwh: null, prev_kwh: null, cpu_w: null, gpu_w: null, cpu_load_pct: null, battery_pct: null, sample_count: 0 }))
+        },
+        sql_tables: { hourly_logs: [], sensor_samples: [], app_energy_logs: [], control_logs: [] }
+      };
+    }
 
-    let appState = {
-      tariff: 4.5,
-      live: JSON.parse(JSON.stringify(NODE_PROFILES.sun_pc)),
-      top_apps: [
-        { name: "Windows 音訊引擎 (audiodg)", category: "系統多媒體", icon: "🔊", share_pct: 36.2, est_wh: 25.9 },
-        { name: "Google Chrome 瀏覽器", category: "網頁與多媒體", icon: "🌐", share_pct: 22.8, est_wh: 16.3 },
-        { name: "WPS Office 辦公套件", category: "生產力工具", icon: "📄", share_pct: 11.4, est_wh: 8.2 },
-        { name: "Parsec 遠端桌面串流", category: "遠端連線與編碼", icon: "🖥️", share_pct: 9.8, est_wh: 7.0 },
-        { name: "Windows 檔案總管 (Explorer)", category: "系統核心介面", icon: "📁", share_pct: 6.9, est_wh: 4.9 },
-        { name: "GIGABYTE Control Center", category: "硬體感測與風扇", icon: "⚙️", share_pct: 5.2, est_wh: 3.7 },
-        { name: "Python (AI ASR 語音服務)", category: "AI 與開發工具", icon: "🐍", share_pct: 4.3, est_wh: 3.1 },
-        { name: "NVIDIA 背景容器服務", category: "顯示卡服務", icon: "🟢", share_pct: 3.4, est_wh: 2.4 }
-      ],
-      history: {
-        yearly_bars: [
-          { label: "12月", period: "2025/12", prev_kwh: 46.2, current_kwh: 49.8, avg_w: 69.2 },
-          { label: "01月", period: "2026/01", prev_kwh: 44.5, current_kwh: 48.1, avg_w: 66.8 },
-          { label: "02月", period: "2026/02", prev_kwh: 39.8, current_kwh: 43.2, avg_w: 64.3 },
-          { label: "03月", period: "2026/03", prev_kwh: 45.0, current_kwh: 50.4, avg_w: 70.0 },
-          { label: "04月", period: "2026/04", prev_kwh: 48.2, current_kwh: 53.6, avg_w: 74.4 },
-          { label: "05月", period: "2026/05", prev_kwh: 55.4, current_kwh: 61.2, avg_w: 85.0 },
-          { label: "06月", period: "2026/06", prev_kwh: 64.1, current_kwh: 72.5, avg_w: 100.7 },
-          { label: "07月", period: "2026/07", prev_kwh: 68.5, current_kwh: 76.8, avg_w: 106.7 },
-          { label: "08月", period: "2026/08", prev_kwh: 67.2, current_kwh: 74.1, avg_w: 102.9 },
-          { label: "09月", period: "2026/09", prev_kwh: 58.9, current_kwh: 63.4, avg_w: 88.1 },
-          { label: "10月", period: "2026/10", prev_kwh: 52.3, current_kwh: 58.9, avg_w: 81.8 },
-          { label: "11月", period: "2026/11", prev_kwh: 47.8, current_kwh: 51.5, avg_w: 71.5 }
-        ],
-        daily_bars: [
-          { label: "10/24", period: "2026-10-24", prev_kwh: 1.95, current_kwh: 2.18, avg_w: 90.8, peak_w: 245.0 },
-          { label: "10/25", period: "2026-10-25", prev_kwh: 2.10, current_kwh: 2.34, avg_w: 97.5, peak_w: 280.0 },
-          { label: "10/26", period: "2026-10-26", prev_kwh: 1.60, current_kwh: 1.75, avg_w: 72.9, peak_w: 165.0 },
-          { label: "10/27", period: "2026-10-27", prev_kwh: 1.55, current_kwh: 1.68, avg_w: 70.0, peak_w: 140.0 },
-          { label: "10/28", period: "2026-10-28", prev_kwh: 1.72, current_kwh: 1.89, avg_w: 78.8, peak_w: 195.0 },
-          { label: "10/29", period: "2026-10-29", prev_kwh: 1.68, current_kwh: 1.82, avg_w: 75.8, peak_w: 180.0 },
-          { label: "10/30", period: "2026-10-30", prev_kwh: 1.75, current_kwh: 1.94, avg_w: 80.8, peak_w: 210.0 },
-          { label: "10/31", period: "2026-10-31", prev_kwh: 2.05, current_kwh: 2.42, avg_w: 100.8, peak_w: 310.0 },
-          { label: "11/01", period: "2026-11-01", prev_kwh: 2.15, current_kwh: 2.51, avg_w: 104.6, peak_w: 325.0 },
-          { label: "11/02", period: "2026-11-02", prev_kwh: 1.64, current_kwh: 1.76, avg_w: 73.3, peak_w: 155.0 },
-          { label: "11/03", period: "2026-11-03", prev_kwh: 1.58, current_kwh: 1.71, avg_w: 71.3, peak_w: 148.0 },
-          { label: "11/04", period: "2026-11-04", prev_kwh: 1.62, current_kwh: 1.79, avg_w: 74.6, peak_w: 175.0 },
-          { label: "11/05", period: "2026-11-05", prev_kwh: 1.70, current_kwh: 1.85, avg_w: 77.1, peak_w: 190.0 },
-          { label: "11/06", period: "2026-11-06", prev_kwh: 1.60, current_kwh: 1.72, avg_w: 71.5, peak_w: 142.0 }
-        ],
-        hourly_bars: []
+    // =========================================================================
+    // Cloud Data Fetching & In-Browser SQLite (sql.js) Synchronization
+    // =========================================================================
+    async function loadTelemetryData() {
+      let loadedFrom = "";
+      // 1. Try local Python live server if available
+      const localUrls = [];
+      if (window.location.protocol.startsWith('http') && (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.'))) {
+        localUrls.push('/api/dashboard');
+      } else {
+        localUrls.push('http://127.0.0.1:8095/api/dashboard');
       }
-    };
 
-    // Populate default 24h bars
-    (function initDefaultHourly() {
-      const hrs = [];
-      for (let i = 0; i < 24; i++) {
-        const hStr = String(i).padStart(2, '0') + ":00";
-        let w = 56.0;
-        let act = 12;
-        let bat = 95;
-        let chg = true;
-        if (i >= 8 && i <= 18) {
-          w = 71.5 + ((i * 7) % 28);
-          act = 35 + ((i * 5) % 20);
-          bat = Math.max(58, 96 - (i - 7) * 3);
-          chg = (i % 3 !== 0);
-        } else if (i >= 19 && i <= 23) {
-          w = 128.0 + ((i * 19) % 95);
-          act = 48 + (i % 11);
-          bat = Math.min(100, 68 + (i - 18) * 6);
-          chg = true;
-        } else {
-          w = 52.0 + (i * 2.5);
-          act = 8 + (i % 7);
-          bat = 100 - i * 2;
-          chg = (i <= 4);
-        }
-        hrs.push({
-          label: String(i).padStart(2, '0'),
-          period: `今日 ${hStr}`,
-          watts: Number(w.toFixed(1)),
-          peak_w: Number((w * 1.38).toFixed(1)),
-          current_kwh: Number((w / 1000).toFixed(3)),
-          prev_kwh: Number(((w * 0.9) / 1000).toFixed(3)),
-          cpu_w: Number((w * 0.38).toFixed(1)),
-          gpu_w: Number((w * 0.25).toFixed(1)),
-          other_w: Number((w * 0.37).toFixed(1)),
-          battery_pct: bat,
-          charging: chg,
-          active_mins: act,
-          idle_mins: 60 - act
-        });
-      }
-      appState.history.hourly_bars = hrs;
-    })();
-
-    const API_BASE = window.location.protocol.startsWith('http') ? '' : 'http://127.0.0.1:8095';
-
-    // Try fetching live telemetry from local Python backend (if running)
-    async function fetchLiveBackend() {
-      if (currentNode !== 'sun_pc') return;
-      try {
-        const res = await fetch(API_BASE + '/api/dashboard');
-        if (res.ok) {
-          const data = await res.json();
-          if (data.live) {
-            appState.tariff = data.live.tariff_ntd_per_kwh || appState.tariff;
-            appState.live.ac_total_w = data.live.ac_total_w;
-            appState.live.dc_total_w = data.live.dc_total_w;
-            appState.live.power_mode_name = data.live.power_mode_name;
-            if (data.live.top_apps && data.live.top_apps.length > 0) {
-              appState.top_apps = data.live.top_apps;
+      for (const u of localUrls) {
+        try {
+          const res = await fetch(u, { cache: 'no-store' });
+          if (res.ok) {
+            const data = await res.json();
+            if (data && data.live) {
+              cloudData = data;
+              loadedFrom = "本機實測 API + 雲端 SQL";
+              break;
             }
           }
-          renderAll();
+        } catch (e) {}
+      }
+
+      // 2. If not running locally (e.g. on GitHub Pages or standalone HTML), fetch cloud_db.json from same origin or GitHub raw
+      if (!loadedFrom) {
+        const cloudUrls = [
+          './cloud_db.json?t=' + Date.now(),
+          'https://raw.githubusercontent.com/zhijaysun0915/UniPowerGuard/main/cloud_db.json?t=' + Date.now()
+        ];
+        for (const cu of cloudUrls) {
+          try {
+            const res = await fetch(cu, { cache: 'no-store' });
+            if (res.ok) {
+              const data = await res.json();
+              if (data && data.live) {
+                cloudData = data;
+                loadedFrom = "雲端資料庫 (GitHub Cloud SQL)";
+                break;
+              }
+            }
+          } catch (e) {}
         }
+      }
+
+      // Apply any user-saved tariff in localStorage when running purely online
+      const savedTariff = localStorage.getItem('unipower_tariff');
+      if (savedTariff && !isNaN(parseFloat(savedTariff)) && cloudData.live) {
+        cloudData.live.tariff_ntd_per_kwh = parseFloat(savedTariff);
+      }
+
+      const connEl = document.getElementById('conn-mode-text');
+      if (connEl) {
+        connEl.textContent = loadedFrom || "雲端實測快照";
+      }
+
+      await rebuildInBrowserSQLite();
+      renderAll();
+    }
+
+    // Build real SQLite tables inside the browser using SQL.js (WebAssembly) so SQL queries work 100% online without local Python
+    async function rebuildInBrowserSQLite() {
+      if (typeof initSqlJs !== 'function') return;
+      try {
+        const SQL = await initSqlJs({
+          locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/${file}`
+        });
+        sqlDb = new SQL.Database();
+
+        sqlDb.run(`
+          CREATE TABLE hourly_logs (
+            hour_key TEXT PRIMARY KEY,
+            date_key TEXT,
+            month_key TEXT,
+            year_key TEXT,
+            avg_sensor_w REAL,
+            peak_sensor_w REAL,
+            min_sensor_w REAL,
+            measured_wh REAL,
+            avg_cpu_w REAL,
+            avg_gpu_w REAL,
+            ac_wall_w REAL,
+            avg_cpu_load_pct REAL,
+            avg_gpu_temp_c REAL,
+            avg_mb_temp_c REAL,
+            battery_pct REAL,
+            charging INTEGER,
+            sample_count INTEGER,
+            first_sample_at TEXT,
+            last_sample_at TEXT
+          );
+          CREATE TABLE sensor_samples (
+            id INTEGER PRIMARY KEY,
+            sampled_at TEXT,
+            hour_key TEXT,
+            hostname TEXT,
+            power_scheme TEXT,
+            measured_sensor_total_w REAL,
+            cpu_pkg_w REAL,
+            cpu_pp0_w REAL,
+            cpu_uncore_w REAL,
+            cpu_load_pct REAL,
+            cpu_temp_c REAL,
+            gpu_power_w REAL,
+            gpu_temp_c REAL,
+            gpu_load_pct REAL,
+            gpu_pstate TEXT,
+            ram_used_gb REAL,
+            ram_total_gb REAL,
+            ram_power_w REAL,
+            disk_used_gb REAL,
+            disk_total_gb REAL,
+            disk_power_w REAL,
+            mb_temp_c REAL,
+            mb_power_w REAL,
+            ac_wall_w REAL
+          );
+          CREATE TABLE app_energy_logs (
+            proc_name TEXT PRIMARY KEY,
+            display_name TEXT,
+            category TEXT,
+            proc_count INTEGER,
+            cpu_seconds REAL,
+            ram_mb REAL,
+            cpu_share_pct REAL,
+            measured_app_wh REAL,
+            updated_at TEXT
+          );
+          CREATE TABLE control_logs (
+            id INTEGER PRIMARY KEY,
+            executed_at TEXT,
+            action TEXT,
+            value TEXT,
+            result_msg TEXT
+          );
+        `);
+
+        const tables = cloudData.sql_tables || {};
+        const hStmt = sqlDb.prepare(`INSERT OR REPLACE INTO hourly_logs VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+        (tables.hourly_logs || []).forEach(r => {
+          hStmt.run([
+            r.hour_key, r.date_key, r.month_key, r.year_key,
+            r.avg_sensor_w, r.peak_sensor_w, r.min_sensor_w, r.measured_wh,
+            r.avg_cpu_w, r.avg_gpu_w, r.ac_wall_w,
+            r.avg_cpu_load_pct, r.avg_gpu_temp_c, r.avg_mb_temp_c,
+            r.battery_pct, r.charging, r.sample_count, r.first_sample_at, r.last_sample_at
+          ]);
+        });
+        hStmt.free();
+
+        const sStmt = sqlDb.prepare(`INSERT OR REPLACE INTO sensor_samples VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+        (tables.sensor_samples || []).forEach(r => {
+          sStmt.run([
+            r.id, r.sampled_at, r.hour_key, r.hostname, r.power_scheme,
+            r.measured_sensor_total_w, r.cpu_pkg_w, r.cpu_pp0_w, r.cpu_uncore_w, r.cpu_load_pct, r.cpu_temp_c,
+            r.gpu_power_w, r.gpu_temp_c, r.gpu_load_pct, r.gpu_pstate,
+            r.ram_used_gb, r.ram_total_gb, r.ram_power_w,
+            r.disk_used_gb, r.disk_total_gb, r.disk_power_w,
+            r.mb_temp_c, r.mb_power_w, r.ac_wall_w
+          ]);
+        });
+        sStmt.free();
+
+        const aStmt = sqlDb.prepare(`INSERT OR REPLACE INTO app_energy_logs VALUES (?,?,?,?,?,?,?,?,?)`);
+        (tables.app_energy_logs || []).forEach(r => {
+          aStmt.run([
+            r.proc_name, r.display_name, r.category, r.proc_count,
+            r.cpu_seconds, r.ram_mb, r.cpu_share_pct, r.measured_app_wh, r.updated_at
+          ]);
+        });
+        aStmt.free();
+
+        // Merge any browser-local control logs
+        const localCtrls = JSON.parse(localStorage.getItem('unipower_ctrl_logs') || '[]');
+        const allCtrls = [...localCtrls, ...(tables.control_logs || [])];
+        const cStmt = sqlDb.prepare(`INSERT OR REPLACE INTO control_logs VALUES (?,?,?,?,?)`);
+        allCtrls.forEach((r, idx) => {
+          cStmt.run([r.id || (idx + 1), r.executed_at, r.action, r.value, r.result_msg]);
+        });
+        cStmt.free();
+
+        const badge = document.getElementById('sql-engine-badge');
+        if (badge) badge.textContent = `雲端 SQL.js 已載入 (${(tables.sensor_samples || []).length} 筆實測取樣)`;
       } catch (e) {
-        // Fallback to embedded snapshot seamlessly when viewed offline/artifact
+        console.error("SQL.js init error:", e);
       }
     }
 
+    // =========================================================================
+    // UI Navigation & Switching
+    // =========================================================================
     function switchNodeProfile(nodeKey) {
       currentNode = nodeKey;
-      const prof = NODE_PROFILES[nodeKey] || NODE_PROFILES.sun_pc;
-      appState.live = JSON.parse(JSON.stringify(prof));
-      // Scale chart values proportionally to node wattage ratio
-      const scale = prof.ac_total_w / 71.5;
-      renderAll(scale);
+      selectedBarIndex = -1;
+      renderAll();
     }
 
     function switchMainTab(tab) {
@@ -602,6 +2155,9 @@
         }
       });
       renderAll();
+      if (tab === 'history') {
+        executeSQLQuery();
+      }
     }
 
     function setGranularity(g) {
@@ -621,196 +2177,306 @@
       renderOverviewChart();
     }
 
-    function renderOverviewChart(scaleFactor = null) {
-      const prof = NODE_PROFILES[currentNode] || NODE_PROFILES.sun_pc;
-      const scale = scaleFactor !== null ? scaleFactor : (prof.ac_total_w / 71.5);
+    // =========================================================================
+    // TAB 1: 用電總覽 (Strictly Real Measured Data or '--')
+    // =========================================================================
+    function renderOverviewChart() {
+      const data = getActiveData();
+      const live = data.live || {};
+      const hist = data.history || {};
       const metric = document.getElementById('metric-selector').value; // 'kwh' | 'watts' | 'cost'
-      const tariff = appState.tariff;
+      const tariff = live.tariff_ntd_per_kwh || 4.5;
 
-      document.getElementById('overview-live-watts').textContent = `${prof.ac_total_w.toFixed(1)} W`;
-      document.getElementById('overview-dc-watts').textContent = `${prof.dc_total_w.toFixed(1)} W`;
+      document.getElementById('overview-sensor-watts').textContent = fmtNum(live.measured_sensor_total_w, 2, ' W');
+      document.getElementById('overview-ac-watts').textContent = fmtNum(live.ac_wall_w, 1, ' W');
+      document.getElementById('last-updated-label').textContent = `最後實測時間：${fmtStr(live.timestamp)}`;
 
       let rawItems = [];
       if (currentGranularity === 'year') {
-        rawItems = appState.history.yearly_bars;
-        document.getElementById('legend-prev').textContent = '去年同期';
-        document.getElementById('legend-curr').textContent = '今年當期';
-        document.getElementById('summary-title-1').textContent = '近12月累計用電量';
+        rawItems = hist.yearly_bars || [];
+        document.getElementById('summary-title-1').textContent = '本年度實測累計用電量 (1~12月)';
       } else if (currentGranularity === 'month') {
-        rawItems = appState.history.daily_bars;
-        document.getElementById('legend-prev').textContent = '上月同期';
-        document.getElementById('legend-curr').textContent = '本月每日';
-        document.getElementById('summary-title-1').textContent = '近30日累計用電量';
+        rawItems = hist.daily_bars || [];
+        document.getElementById('summary-title-1').textContent = '近14日實測累計用電量';
       } else if (currentGranularity === 'day') {
-        rawItems = appState.history.daily_bars.slice(-7);
-        document.getElementById('legend-prev').textContent = '上週同日';
-        document.getElementById('legend-curr').textContent = '本週每日';
-        document.getElementById('summary-title-1').textContent = '近7日累計用電量';
+        rawItems = (hist.daily_bars || []).slice(-7);
+        document.getElementById('summary-title-1').textContent = '近7日實測累計用電量';
       } else {
-        rawItems = appState.history.hourly_bars;
-        document.getElementById('legend-prev').textContent = '昨日同刻';
-        document.getElementById('legend-curr').textContent = '今日每時';
-        document.getElementById('summary-title-1').textContent = '過去24小時總用電量';
+        rawItems = hist.hourly_bars || [];
+        document.getElementById('summary-title-1').textContent = '過去24小時實測累計用電量';
       }
 
+      // Default select the latest bar that has real measured data, or the last bar
       if (selectedBarIndex < 0 || selectedBarIndex >= rawItems.length) {
-        selectedBarIndex = rawItems.length - 1;
+        let lastMeasuredIdx = -1;
+        rawItems.forEach((it, idx) => {
+          if (it.sample_count > 0) lastMeasuredIdx = idx;
+        });
+        selectedBarIndex = lastMeasuredIdx >= 0 ? lastMeasuredIdx : (rawItems.length - 1);
       }
 
-      // Compute display values for each bar
-      const mapped = rawItems.map((item, idx) => {
-        let val = 0;
-        let unit = '度';
+      // Compute display values for each bar (strictly null if unmeasured)
+      const mapped = rawItems.map((item) => {
+        const hasMeasurement = (item.sample_count && item.sample_count > 0);
+        let val = null;
+        let unit = '度 (kWh)';
+
         if (metric === 'kwh') {
           if (currentGranularity === 'hour') {
-            val = Number((item.watts * scale).toFixed(1));
+            val = hasMeasurement && item.measured_wh !== null ? Number(item.measured_wh) : null;
             unit = 'Wh';
           } else {
-            val = Number((item.current_kwh * scale).toFixed(2));
-            unit = '度';
+            val = hasMeasurement && item.current_kwh !== null ? Number(item.current_kwh) : null;
+            unit = '度 (kWh)';
           }
         } else if (metric === 'watts') {
-          val = Number(((item.avg_w || item.watts || 71.5) * scale).toFixed(1));
+          const w = (item.avg_w !== undefined) ? item.avg_w : item.watts;
+          val = hasMeasurement && w !== null ? Number(w) : null;
           unit = 'W';
         } else {
-          const kwh = (currentGranularity === 'hour') ? ((item.watts * scale) / 1000.0) : (item.current_kwh * scale);
-          val = Number((kwh * tariff).toFixed(1));
-          unit = '元';
+          // Cost in NT$
+          const kwh = (currentGranularity === 'hour')
+            ? (hasMeasurement && item.measured_wh !== null ? item.measured_wh / 1000.0 : null)
+            : (hasMeasurement && item.current_kwh !== null ? item.current_kwh : null);
+          val = (kwh !== null) ? Number((kwh * tariff).toFixed(3)) : null;
+          unit = '元 (NT$)';
         }
-        return { ...item, displayVal: val, unit };
+        return { ...item, hasMeasurement, displayVal: val, unit };
       });
 
-      const maxVal = Math.max(...mapped.map(m => m.displayVal), 1) * 1.18;
-      document.getElementById('y-max-label').textContent = Math.round(maxVal);
-      document.getElementById('y-mid2-label').textContent = Math.round(maxVal * 0.66);
-      document.getElementById('y-mid1-label').textContent = Math.round(maxVal * 0.33);
-      document.getElementById('chart-unit-label').textContent = mapped[0]?.unit || '度';
+      const measuredVals = mapped.filter(m => m.displayVal !== null).map(m => m.displayVal);
+      const maxVal = measuredVals.length > 0 ? Math.max(...measuredVals) * 1.25 : 50;
 
-      const sel = mapped[selectedBarIndex] || mapped[mapped.length - 1];
-      document.getElementById('callout-period').textContent = sel.period;
-      document.getElementById('callout-value').textContent = `${sel.displayVal} ${sel.unit}`;
+      const unitLabel = mapped[0]?.unit || '度';
+      document.getElementById('chart-unit-label').textContent = unitLabel;
+
+      const sel = mapped[selectedBarIndex] || {};
+      document.getElementById('callout-period').textContent = fmtStr(sel.period);
+      if (sel.displayVal !== null && sel.displayVal !== undefined) {
+        const dec = (metric === 'kwh' && currentGranularity !== 'hour') ? 4 : 2;
+        document.getElementById('callout-value').textContent = `${Number(sel.displayVal).toFixed(dec)} ${sel.unit}`;
+        document.getElementById('callout-samples').textContent = `實測樣本數：${sel.sample_count} 筆`;
+      } else {
+        document.getElementById('callout-value').textContent = `-- (${sel.unit || ''})`;
+        document.getElementById('callout-samples').textContent = `實測樣本數：0 筆 (此區間無量測紀錄)`;
+      }
 
       const container = document.getElementById('overview-bars-container');
-      // Keep the 3 grid lines and rebuild bars
+      const fmtY = (v) => (maxVal < 1 ? v.toFixed(3) : (maxVal < 10 ? v.toFixed(1) : Math.round(v)));
       const gridHTML = `
         <div class="absolute inset-x-0 top-6 border-t border-stone-200 pointer-events-none flex items-center">
-          <span class="text-xs text-stone-400 -mt-5 pl-1">${Math.round(maxVal)}</span>
+          <span class="text-xs text-stone-400 -mt-5 pl-1">${fmtY(maxVal)}</span>
         </div>
         <div class="absolute inset-x-0 top-1/3 border-t border-stone-200 pointer-events-none flex items-center">
-          <span class="text-xs text-stone-400 -mt-5 pl-1">${Math.round(maxVal * 0.66)}</span>
+          <span class="text-xs text-stone-400 -mt-5 pl-1">${fmtY(maxVal * 0.66)}</span>
         </div>
         <div class="absolute inset-x-0 top-2/3 border-t border-stone-200 pointer-events-none flex items-center">
-          <span class="text-xs text-stone-400 -mt-5 pl-1">${Math.round(maxVal * 0.33)}</span>
+          <span class="text-xs text-stone-400 -mt-5 pl-1">${fmtY(maxVal * 0.33)}</span>
         </div>
       `;
 
       const barsHTML = mapped.map((bar, i) => {
-        const pct = Math.max(6, Math.min(96, Math.round((bar.displayVal / maxVal) * 100)));
         const isSelected = (i === selectedBarIndex);
-        const barColor = isSelected ? '#00699e' : '#38a3dc';
-        return `
-          <div onclick="selectBar(${i})" class="relative flex-1 h-full flex flex-col justify-end items-center cursor-pointer group z-10">
-            ${isSelected ? `<div class="absolute inset-y-0 border-l-2 border-dashed border-stone-600 pointer-events-none" style="bottom:${pct}%;"></div>` : ''}
-            <div class="w-full max-w-[26px] rounded-t-sm bar-transition group-hover:opacity-85" style="height:${pct}%; background-color:${barColor};"></div>
-            <span class="absolute -bottom-6 text-xs ${isSelected ? 'font-extrabold text-stone-900' : 'text-stone-500'}">${bar.label.replace('月','')}</span>
-          </div>
-        `;
+        const cleanLabel = String(bar.label || '').replace('月', '');
+        const showTick = (mapped.length <= 14) || (i % 2 === 0) || isSelected;
+
+        if (bar.displayVal === null) {
+          // Strictly '--' for unrecorded periods!
+          return `
+            <div onclick="selectBar(${i})" class="relative flex-1 h-full flex flex-col justify-end items-center cursor-pointer group z-10" title="${bar.period}: 無量測紀錄 (--)">
+              ${isSelected ? `<div class="absolute inset-y-0 border-l-2 border-dashed border-stone-400 pointer-events-none" style="bottom:12%;"></div>` : ''}
+              <span class="text-[10px] font-mono text-stone-400 mb-1 select-none">--</span>
+              <div class="w-full max-w-[24px] h-1.5 rounded-t-sm bg-stone-200 border border-stone-300"></div>
+              ${showTick ? `<span class="absolute -bottom-6 text-[11px] ${isSelected ? 'font-extrabold text-stone-900' : 'text-stone-400'}">${cleanLabel}</span>` : ''}
+            </div>
+          `;
+        } else {
+          const pct = Math.max(10, Math.min(95, Math.round((bar.displayVal / maxVal) * 100)));
+          const barColor = isSelected ? '#00699e' : '#38a3dc';
+          return `
+            <div onclick="selectBar(${i})" class="relative flex-1 h-full flex flex-col justify-end items-center cursor-pointer group z-10" title="${bar.period}: ${bar.displayVal} ${bar.unit} (${bar.sample_count} 筆實測)">
+              ${isSelected ? `<div class="absolute inset-y-0 border-l-2 border-dashed border-stone-700 pointer-events-none" style="bottom:${pct}%;"></div>` : ''}
+              <span class="text-[10px] font-bold text-teal-800 mb-0.5">${Number(bar.displayVal).toFixed(bar.displayVal < 1 ? 3 : 1)}</span>
+              <div class="w-full max-w-[26px] rounded-t-sm bar-transition shadow-xs" style="height:${pct}%; background-color:${barColor};"></div>
+              ${showTick ? `<span class="absolute -bottom-6 text-[11px] ${isSelected ? 'font-extrabold text-stone-900' : 'text-stone-600 font-semibold'}">${cleanLabel}</span>` : ''}
+            </div>
+          `;
+        }
       }).join('');
 
       container.innerHTML = gridHTML + barsHTML;
 
-      // Update Bottom Summary Cards
-      let sumKwh = 0;
-      if (currentGranularity === 'year') {
-        sumKwh = rawItems.reduce((acc, r) => acc + r.current_kwh * scale, 0);
-      } else if (currentGranularity === 'month') {
-        sumKwh = rawItems.reduce((acc, r) => acc + r.current_kwh * scale, 0) * (30 / rawItems.length);
-      } else if (currentGranularity === 'day') {
-        sumKwh = rawItems.reduce((acc, r) => acc + r.current_kwh * scale, 0);
+      // Update Bottom Summary Cards strictly from real measured bars
+      const validBars = rawItems.filter(r => r.sample_count && r.sample_count > 0);
+      if (validBars.length === 0) {
+        document.getElementById('summary-val-1').textContent = '-- 度 (kWh)';
+        document.getElementById('summary-sub-1').textContent = '此區間尚無實際感測器量測紀錄';
+        document.getElementById('summary-val-2').textContent = '--';
       } else {
-        sumKwh = rawItems.reduce((acc, r) => acc + (r.watts * scale) / 1000.0, 0);
+        let totalWh = 0;
+        let totalSamples = 0;
+        validBars.forEach(r => {
+          const wh = (r.measured_wh !== undefined && r.measured_wh !== null)
+            ? Number(r.measured_wh)
+            : (r.current_wh !== undefined && r.current_wh !== null ? Number(r.current_wh) : (Number(r.current_kwh || 0) * 1000.0));
+          totalWh += wh;
+          totalSamples += (r.sample_count || 0);
+        });
+        const totalKwh = totalWh / 1000.0;
+        const estCost = totalKwh * tariff;
+        document.getElementById('summary-val-1').textContent = `${totalKwh.toFixed(4)} 度 (${totalWh.toFixed(1)} Wh)`;
+        document.getElementById('summary-sub-1').textContent = `已實測 ${validBars.length} 個時段 · 共 ${totalSamples} 筆硬體取樣`;
+        document.getElementById('summary-val-2').textContent = `NT$ ${estCost.toFixed(2)}`;
       }
-
-      const estCost = Math.round(sumKwh * tariff);
-      document.getElementById('summary-val-1').textContent = `${sumKwh.toFixed(2)} 度 (kWh)`;
-      document.getElementById('summary-sub-1').textContent = `即時功率 ${prof.ac_total_w.toFixed(1)} W · 每日約 ${(prof.ac_total_w * 24 / 1000).toFixed(2)} 度`;
-      document.getElementById('summary-val-2').textContent = `NT$ ${estCost.toLocaleString()}`;
-      document.getElementById('summary-sub-2').textContent = `目前單價：NT$ ${tariff.toFixed(2)} / 度 (點擊右上角「✎ 單價」可調整)`;
+      document.getElementById('summary-sub-2').textContent = `目前單價：NT$ ${tariff.toFixed(2)} / 度 (點擊右上角「✎ 設定單價」可修改)`;
     }
 
+    // =========================================================================
+    // TAB 2: 電腦設備資訊 (Strictly Real Sensor Values or '--')
+    // =========================================================================
     function renderDeviceCards() {
-      const prof = NODE_PROFILES[currentNode] || NODE_PROFILES.sun_pc;
-      document.getElementById('dev-host-title').textContent = prof.hostname;
-      document.getElementById('dev-power-scheme').textContent = prof.power_mode_name;
-      document.getElementById('dev-battery-banner').textContent = prof.battery.status_text;
-      document.getElementById('banner-mb-temp').textContent = prof.ambient_temp_c;
-      document.getElementById('banner-ac-watts').textContent = prof.ac_total_w.toFixed(1);
+      const data = getActiveData();
+      const live = data.live || {};
+      const comps = live.components || {};
 
-      const comps = prof.components;
-      const items = [
-        { key: 'cpu', icon: '🧠', ...comps.cpu, actionLabel: '切換平衡/省電' },
-        { key: 'gpu', icon: '🎮', ...comps.gpu, actionLabel: '調整功耗牆 (171W)' },
-        { key: 'ram', icon: '⚡', ...comps.ram, actionLabel: '1.1V JEDEC 運行' },
-        { key: 'disk', icon: '💾', ...comps.disk, actionLabel: 'SMART 狀態良好' },
-        { key: 'mb_vrm_fan', icon: '🌡️', ...comps.mb_vrm_fan, actionLabel: '智慧風扇曲線' },
-        { key: 'strata', icon: '🚀', ...comps.strata, actionLabel: '切換啟停狀態' }
+      document.getElementById('dev-host-title').textContent = fmtStr(live.hostname);
+      document.getElementById('dev-power-scheme').textContent = fmtStr(live.power_mode_name);
+      document.getElementById('dev-battery-banner').textContent = live.battery
+        ? `電池狀態：${live.battery.percent !== null ? live.battery.percent + '%' : '--'} (${live.battery.status_text || '--'})`
+        : '電池狀態：--';
+      document.getElementById('banner-mb-temp').textContent = fmtNum(live.ambient_temp_c, 1);
+      document.getElementById('banner-sensor-watts').textContent = fmtNum(live.measured_sensor_total_w, 2);
+      document.getElementById('banner-ac-watts').textContent = fmtNum(live.ac_wall_w, 1);
+
+      const cpu = comps.cpu || {};
+      const gpu = comps.gpu || {};
+      const ram = comps.ram || {};
+      const disk = comps.disk || {};
+      const mb = comps.mb_vrm_fan || {};
+      const ai = comps.ai_services || {};
+
+      const cards = [
+        {
+          key: 'cpu',
+          icon: '🧠',
+          name: fmtStr(cpu.name),
+          powerText: fmtNum(cpu.power_w, 2, ' W'),
+          tempText: fmtNum(cpu.temp_c, 1, ' °C'),
+          status: cpu.status || 'off',
+          line1: `PP0 核心：${fmtNum(cpu.cores_w, 2, ' W')} ｜ Uncore：${fmtNum(cpu.uncore_w, 2, ' W')}`,
+          line2: `實測負載：${fmtNum(cpu.load_pct, 1, '%')} ｜ 時脈：${fmtInt(cpu.clock_mhz, ' MHz')}`,
+          sensorNote: '功耗感測：Intel RAPL 實測 ｜ CPU 溫度：WMI 無暴露 (--)'
+        },
+        {
+          key: 'gpu',
+          icon: '🎮',
+          name: fmtStr(gpu.name),
+          powerText: fmtNum(gpu.power_w, 2, ' W'),
+          tempText: fmtNum(gpu.temp_c, 1, ' °C'),
+          status: gpu.status || 'off',
+          line1: `狀態：${fmtStr(gpu.pstate)} ｜ 負載：${fmtNum(gpu.load_pct, 1, '%')} ｜ 風扇：${fmtInt(gpu.fan_pct, '%')}`,
+          line2: `VRAM：${fmtInt(gpu.vram_mb)} / ${fmtInt(gpu.vram_total_mb, ' MB')} ｜ 功耗牆：${fmtNum(gpu.limit_w, 0, ' W')}`,
+          sensorNote: '功耗與溫度感測：NVIDIA nvidia-smi 全項實測 (點擊電源鈕可調功耗上限)'
+        },
+        {
+          key: 'ram',
+          icon: '⚡',
+          name: fmtStr(ram.name),
+          powerText: fmtNum(ram.power_w, 2, ' W'),
+          tempText: fmtNum(ram.temp_c, 1, ' °C'),
+          status: ram.status || 'off',
+          line1: `實測已用：${fmtNum(ram.used_gb, 2)} / ${fmtNum(ram.total_gb, 2, ' GB')} (${fmtNum(ram.used_pct, 1, '%')})`,
+          line2: `實測電壓：${fmtNum(ram.voltage_v, 2, ' V')}`,
+          sensorNote: '容量與電壓：WMI 實測 ｜ DRAM RAPL 瓦數與溫度：無感測器 (--)'
+        },
+        {
+          key: 'disk',
+          icon: '💾',
+          name: fmtStr(disk.name),
+          powerText: fmtNum(disk.power_w, 2, ' W'),
+          tempText: fmtNum(disk.temp_c, 1, ' °C'),
+          status: disk.status || 'off',
+          line1: `實測已用空間：${fmtNum(disk.used_gb, 1)} / ${fmtNum(disk.total_gb, 1, ' GB')} (${fmtNum(disk.used_pct, 1, '%')})`,
+          line2: `連線實體硬碟數：${fmtInt(disk.active_drives, ' 顆')}`,
+          sensorNote: '容量與數量：實測 ｜ 硬碟瓦數與溫度：無硬體功率計 (--)'
+        },
+        {
+          key: 'mb_vrm_fan',
+          icon: '🌡️',
+          name: fmtStr(mb.name),
+          powerText: fmtNum(mb.power_w, 2, ' W'),
+          tempText: fmtNum(mb.temp_c, 1, ' °C'),
+          status: mb.status || 'off',
+          line1: `ACPI ThermalZone (_TZ.TZ00)：${fmtNum(mb.temp_c, 1, ' °C')} (301.0 K 實測)`,
+          line2: `系統電源配置：${fmtStr(live.power_mode_name)}`,
+          sensorNote: '主機板溫度：ACPI 實測 ｜ 主機板/風扇瓦數：無感測器 (--)'
+        },
+        {
+          key: 'ai_services',
+          icon: '🦙',
+          name: fmtStr(ai.name),
+          powerText: fmtNum(ai.power_w, 2, ' W'),
+          tempText: fmtNum(ai.temp_c, 1, ' °C'),
+          status: ai.status || 'off',
+          line1: `Ollama：${ai.ollama_on ? '運行中 (' + fmtNum(ai.ollama_ram_mb, 1, ' MB') + ')' : '未運行'}`,
+          line2: `Strata：${ai.strata_on ? '運行中 (' + fmtNum(ai.strata_ram_mb, 1, ' MB') + ')' : '未運行'}`,
+          sensorNote: '程序狀態與記憶體：OS 實測 ｜ 獨立瓦數：無單一程序功率計 (--)'
+        }
       ];
 
       const grid = document.getElementById('device-cards-grid');
-      grid.innerHTML = items.map(item => {
+      grid.innerHTML = cards.map(item => {
         const isOn = item.status === 'on';
-        const btnBg = isOn ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-rose-50 text-rose-500 border-rose-200';
+        const btnBg = isOn ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-stone-100 text-stone-400 border-stone-200';
+        const powerColor = item.powerText === '--' ? 'text-stone-400' : 'text-teal-700';
         return `
           <div class="bg-white rounded-2xl border border-stone-200 p-4 sm:p-5 shadow-sm flex flex-col justify-between hover:border-stone-300 transition">
-            <div class="flex items-start justify-between gap-2 mb-3">
+            <div class="flex items-start justify-between gap-2 mb-2.5">
               <div class="w-11 h-11 rounded-xl bg-stone-100 border border-stone-200 flex items-center justify-center text-2xl">
                 ${item.icon}
               </div>
-              <button onclick="toggleDeviceCard('${item.key}')" title="${item.actionLabel}" class="w-9 h-9 rounded-full border ${btnBg} flex items-center justify-center font-bold text-base shadow-sm hover:scale-105 transition">
-                ⏻
-              </button>
+              <div class="flex items-center gap-2">
+                <span class="text-xs px-2 py-0.5 rounded-full ${isOn ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-stone-100 text-stone-500'} font-semibold">
+                  ${isOn ? '運行中' : '未連線/待命'}
+                </span>
+                <button onclick="handleDeviceAction('${item.key}')" title="硬體控制操作" class="w-8 h-8 rounded-full border ${btnBg} flex items-center justify-center font-bold text-sm shadow-xs hover:scale-105 transition">
+                  ⏻
+                </button>
+              </div>
             </div>
             <div>
-              <div class="font-bold text-stone-800 text-sm sm:text-base flex items-center justify-between">
-                <span>${item.name}</span>
-                <span class="text-teal-700 font-extrabold">${item.power_w.toFixed(1)} W</span>
+              <div class="font-bold text-stone-800 text-sm sm:text-base flex items-center justify-between gap-2">
+                <span class="truncate">${item.name}</span>
+                <span class="${powerColor} font-extrabold shrink-0">實測功率 ${item.powerText}</span>
               </div>
-              <div class="text-xs sm:text-sm text-stone-500 mt-1">
-                運作溫度 <strong class="text-stone-700">${item.temp_c} °C</strong>
+              <div class="text-xs sm:text-sm text-stone-600 mt-1.5 flex items-center justify-between">
+                <span>實測溫度：<strong class="text-stone-800">${item.tempText}</strong></span>
               </div>
-              <div class="text-xs text-stone-400 mt-1 truncate">${item.sub}</div>
+              <div class="text-xs text-stone-600 mt-1 bg-stone-50 p-2 rounded-lg border border-stone-100 space-y-0.5">
+                <div>${item.line1}</div>
+                <div>${item.line2}</div>
+              </div>
+              <div class="text-[11px] text-stone-400 mt-1.5">${item.sensorNote}</div>
             </div>
           </div>
         `;
       }).join('');
     }
 
-    function toggleDeviceCard(key) {
-      const prof = NODE_PROFILES[currentNode];
-      if (!prof || !prof.components[key]) return;
-      const comp = prof.components[key];
-      if (key === 'strata') {
-        if (comp.status === 'on') {
-          comp.status = 'off';
-          comp.power_w = 0.0;
-          comp.sub = '已關閉 (瞬間釋放 39GB RAM 與 185W 功耗)';
-          prof.ac_total_w = Math.max(12.0, Number((prof.ac_total_w - 185.0).toFixed(1)));
-          prof.dc_total_w = Math.max(10.0, Number((prof.dc_total_w - 165.0).toFixed(1)));
-          sendControl('toggle_strata', 'off');
-        } else {
-          comp.status = 'on';
-          comp.power_w = 185.0;
-          comp.sub = '高負載推論預覽中 (CPU 145W + GPU 40W)';
-          prof.ac_total_w = Number((prof.ac_total_w + 185.0).toFixed(1));
-          prof.dc_total_w = Number((prof.dc_total_w + 165.0).toFixed(1));
-        }
-      } else if (key === 'gpu') {
-        const nextPl = prompt('請輸入 RTX 5060 Ti 功耗上限 (162 ~ 206 W)：', '171');
+    function handleDeviceAction(key) {
+      if (key === 'gpu') {
+        const nextPl = prompt('請輸入 RTX 5060 Ti 功耗上限 (150 ~ 206 W)：', '171');
         if (nextPl) sendControl('set_gpu_pl', nextPl);
+      } else if (key === 'cpu') {
+        sendControl('set_power_mode', 'balanced');
+      } else if (key === 'ai_services') {
+        sendControl('unload_ollama', '1');
       }
-      renderAll();
     }
 
+    // =========================================================================
+    // TAB 3: 電池與 APP 耗電 (Strictly Real Data or '--')
+    // =========================================================================
     function setBatteryRange(range) {
       batteryRange = range;
       document.getElementById('bat-seg-24h').className = (range === '24h')
@@ -823,124 +2489,240 @@
     }
 
     function toggleAppMetricMode() {
-      showAppWh = !showAppWh;
-      document.getElementById('app-metric-toggle').textContent = showAppWh ? '切換顯示百分比 (%)' : '切換顯示瓦時 (Wh)';
+      appMetricMode = (appMetricMode + 1) % 3;
       renderBatteryTab();
     }
 
     function renderBatteryTab() {
-      const prof = NODE_PROFILES[currentNode] || NODE_PROFILES.sun_pc;
-      const scale = prof.ac_total_w / 71.5;
+      const data = getActiveData();
+      const live = data.live || {};
+      const hist = data.history || {};
+      const bat = live.battery || {};
 
-      document.getElementById('bat-status-headline').textContent = prof.battery.status_text;
-      document.getElementById('bat-status-sub').textContent = prof.battery.last_full_charge;
-      document.getElementById('bat-live-watts').textContent = `${prof.ac_total_w.toFixed(1)} W`;
+      document.getElementById('bat-pct-headline').textContent = (bat.percent !== null && bat.percent !== undefined) ? `${bat.percent}%` : '-- %';
+      document.getElementById('bat-status-headline').textContent = `(${fmtStr(bat.status_text)})`;
+      document.getElementById('bat-last-charge').textContent = fmtStr(bat.last_full_charge);
+      document.getElementById('bat-live-watts').textContent = fmtNum(live.measured_sensor_total_w, 2, ' W');
 
       const batContainer = document.getElementById('ios-battery-bars');
       const actContainer = document.getElementById('ios-activity-bars');
 
+      let slots = [];
       if (batteryRange === '24h') {
-        const hrs = appState.history.hourly_bars;
-        batContainer.innerHTML = hrs.map((h, i) => {
-          const pct = prof.is_laptop ? h.battery_pct : Math.min(100, Math.max(25, Math.round((h.watts / 180) * 100)));
-          const showLabel = (i % 3 === 0);
-          return `
-            <div class="flex-1 h-full flex flex-col justify-end items-center relative group">
-              <div class="w-full rounded-t-sm bg-emerald-500 bar-transition" style="height:${pct}%;" title="${h.period}: ${prof.is_laptop ? h.battery_pct + '%' : (h.watts * scale).toFixed(1) + 'W'}"></div>
-              ${h.charging ? `<div class="w-full h-1.5 bg-emerald-600 mt-0.5 rounded-xs"></div>` : `<div class="w-full h-1.5 bg-transparent mt-0.5"></div>`}
-              ${showLabel ? `<span class="absolute -bottom-4 text-xs text-stone-400">${h.label}</span>` : ''}
-            </div>
-          `;
-        }).join('');
-
-        actContainer.innerHTML = hrs.map((h, i) => {
-          const actPct = Math.min(100, Math.round((h.active_mins / 60) * 100));
-          const showLabel = (i % 3 === 0);
-          return `
-            <div class="flex-1 h-full flex flex-col justify-end items-center relative">
-              <div class="w-full rounded-t-sm bg-sky-500 bar-transition" style="height:${actPct}%;" title="${h.period}: 活躍 ${h.active_mins} 分鐘"></div>
-              ${showLabel ? `<span class="absolute -bottom-4 text-xs text-stone-400">${h.label}</span>` : ''}
-            </div>
-          `;
-        }).join('');
+        slots = hist.hourly_bars || [];
       } else {
-        const days = appState.history.daily_bars.slice(-10);
-        batContainer.innerHTML = days.map(d => {
-          const pct = Math.min(100, Math.round((d.current_kwh / 3.0) * 100));
-          return `
-            <div class="flex-1 h-full flex flex-col justify-end items-center relative">
-              <div class="w-4/5 rounded-t-sm bg-emerald-500 bar-transition" style="height:${pct}%;" title="${d.period}: ${(d.current_kwh * scale).toFixed(2)} 度"></div>
-              <span class="absolute -bottom-4 text-xs text-stone-400">${d.label}</span>
-            </div>
-          `;
-        }).join('');
-
-        actContainer.innerHTML = days.map((d, idx) => {
-          const actPct = 55 + ((idx * 13) % 35);
-          return `
-            <div class="flex-1 h-full flex flex-col justify-end items-center relative">
-              <div class="w-4/5 rounded-t-sm bg-sky-500 bar-transition" style="height:${actPct}%;"></div>
-              <span class="absolute -bottom-4 text-xs text-stone-400">${d.label}</span>
-            </div>
-          `;
-        }).join('');
+        slots = (hist.daily_bars || []).slice(-10);
       }
 
-      // Render App Energy Breakdown List
+      let recordedSlotsCount = 0;
+      let totalSampleCount = 0;
+
+      const maxW = Math.max(...slots.map(s => Number(s.watts || s.avg_w || 0)), 40) * 1.2;
+
+      batContainer.innerHTML = slots.map((s, i) => {
+        const hasData = (s.sample_count && s.sample_count > 0);
+        if (hasData) {
+          recordedSlotsCount++;
+          totalSampleCount += s.sample_count;
+        }
+        const showLabel = (slots.length <= 10) || (i % 3 === 0) || hasData;
+        const wVal = (s.watts !== undefined && s.watts !== null) ? s.watts : s.avg_w;
+
+        if (!hasData || wVal === null || wVal === undefined) {
+          return `
+            <div class="flex-1 h-full flex flex-col justify-end items-center relative" title="${s.period}: 無量測紀錄 (--)">
+              <span class="text-[9px] font-mono text-stone-300 mb-0.5">--</span>
+              <div class="w-full max-w-[20px] h-1 bg-stone-200 rounded-t-sm"></div>
+              ${showLabel ? `<span class="absolute -bottom-5 text-[10px] text-stone-400">${s.label}</span>` : ''}
+            </div>
+          `;
+        } else {
+          const pct = Math.max(12, Math.min(95, Math.round((wVal / maxW) * 100)));
+          return `
+            <div class="flex-1 h-full flex flex-col justify-end items-center relative" title="${s.period}: 實測平均 ${wVal} W (${s.sample_count} 筆取樣)">
+              <span class="text-[9px] font-bold text-emerald-700 mb-0.5">${Number(wVal).toFixed(1)}W</span>
+              <div class="w-full max-w-[20px] rounded-t-sm bg-emerald-500 bar-transition" style="height:${pct}%;"></div>
+              ${showLabel ? `<span class="absolute -bottom-5 text-[10px] font-bold text-stone-700">${s.label}</span>` : ''}
+            </div>
+          `;
+        }
+      }).join('');
+
+      actContainer.innerHTML = slots.map((s, i) => {
+        const hasData = (s.sample_count && s.sample_count > 0);
+        const showLabel = (slots.length <= 10) || (i % 3 === 0) || hasData;
+        const loadVal = (s.cpu_load_pct !== undefined && s.cpu_load_pct !== null) ? s.cpu_load_pct : s.avg_cpu_load_pct;
+
+        if (!hasData || loadVal === null || loadVal === undefined) {
+          return `
+            <div class="flex-1 h-full flex flex-col justify-end items-center relative" title="${s.period}: 無量測紀錄 (--)">
+              <span class="text-[9px] font-mono text-stone-300 mb-0.5">--</span>
+              <div class="w-full max-w-[20px] h-1 bg-stone-200 rounded-t-sm"></div>
+              ${showLabel ? `<span class="absolute -bottom-5 text-[10px] text-stone-400">${s.label}</span>` : ''}
+            </div>
+          `;
+        } else {
+          const pct = Math.max(10, Math.min(95, Math.round(loadVal)));
+          return `
+            <div class="flex-1 h-full flex flex-col justify-end items-center relative" title="${s.period}: 實測 CPU 負載 ${loadVal}%">
+              <span class="text-[9px] font-bold text-sky-700 mb-0.5">${Number(loadVal).toFixed(0)}%</span>
+              <div class="w-full max-w-[20px] rounded-t-sm bg-sky-500 bar-transition" style="height:${pct}%;"></div>
+              ${showLabel ? `<span class="absolute -bottom-5 text-[10px] font-bold text-stone-700">${s.label}</span>` : ''}
+            </div>
+          `;
+        }
+      }).join('');
+
+      document.getElementById('ios-recorded-slots').textContent = recordedSlotsCount > 0 ? `${recordedSlotsCount} / ${slots.length} 個時段` : '--';
+      document.getElementById('ios-total-samples').textContent = totalSampleCount > 0 ? `${totalSampleCount} 筆實測` : '--';
+      document.getElementById('ios-screen-time').textContent = '-- / --';
+
       const appList = document.getElementById('ios-app-list');
-      appList.innerHTML = appState.top_apps.map(app => {
-        const valText = showAppWh
-          ? `${(app.est_wh * scale).toFixed(1)} Wh`
-          : `${app.share_pct.toFixed(0)}%`;
+      const apps = live.top_apps || [];
+      if (apps.length === 0) {
+        appList.innerHTML = `<div class="py-6 text-center text-sm text-stone-400">無處理程序量測資料 (--)</div>`;
+        return;
+      }
+
+      appList.innerHTML = apps.map(app => {
+        let rightPrimary = '';
+        let rightSecondary = '';
+        if (appMetricMode === 0) {
+          rightPrimary = fmtNum(app.share_pct, 1, '%');
+          rightSecondary = `CPU 實測 ${fmtNum(app.cpu_s, 1, 's')} · RAM ${fmtNum(app.ram_mb, 0, ' MB')}`;
+        } else if (appMetricMode === 1) {
+          rightPrimary = `${fmtNum(app.cpu_s, 1, ' 秒')}`;
+          rightSecondary = `RAM 實測 ${fmtNum(app.ram_mb, 1, ' MB')} (${app.count || 1} 程序)`;
+        } else {
+          rightPrimary = `${fmtNum(app.measured_wh, 1, ' Wh')}`;
+          rightSecondary = `單一程序無硬體瓦時計 (--)`;
+        }
+
+        const barW = app.share_pct !== null && app.share_pct !== undefined ? Math.min(100, Math.max(2, app.share_pct)) : 0;
         return `
           <div class="py-3 flex items-center justify-between gap-3">
             <div class="flex items-center gap-3 min-w-0">
               <div class="w-10 h-10 rounded-xl bg-stone-100 border border-stone-200 flex items-center justify-center text-xl shrink-0">
-                ${app.icon}
+                ${app.icon || '⚡'}
               </div>
               <div class="min-w-0">
-                <div class="font-bold text-stone-800 text-sm sm:text-base truncate">${app.name}</div>
-                <div class="text-xs text-stone-400">${app.category}</div>
-                <div class="w-36 sm:w-56 h-1.5 bg-stone-100 rounded-full mt-1 overflow-hidden">
-                  <div class="h-full bg-sky-500 rounded-full" style="width:${Math.min(100, app.share_pct)}%;"></div>
+                <div class="font-bold text-stone-800 text-sm sm:text-base truncate">${fmtStr(app.name)}</div>
+                <div class="text-xs text-stone-400">${fmtStr(app.category)} · 程序名稱: <code>${fmtStr(app.proc_name)}</code></div>
+                <div class="w-40 sm:w-64 h-1.5 bg-stone-100 rounded-full mt-1.5 overflow-hidden">
+                  <div class="h-full bg-sky-500 rounded-full" style="width:${barW}%;"></div>
                 </div>
               </div>
             </div>
-            <div class="text-base sm:text-lg font-bold text-stone-500 shrink-0">${valText}</div>
+            <div class="text-right shrink-0">
+              <div class="text-base sm:text-lg font-extrabold text-stone-700">${rightPrimary}</div>
+              <div class="text-[11px] text-stone-400">${rightSecondary}</div>
+            </div>
           </div>
         `;
       }).join('');
     }
 
+    // =========================================================================
+    // TAB 4: 歷史查詢 & 雲端 SQL 資料庫 (In-Browser SQL.js + Real Sample Table)
+    // =========================================================================
     function renderHistoryTable() {
-      const prof = NODE_PROFILES[currentNode] || NODE_PROFILES.sun_pc;
-      const scale = prof.ac_total_w / 71.5;
+      const data = getActiveData();
+      const samples = (data.sql_tables && data.sql_tables.sensor_samples) || [];
       const tbody = document.getElementById('history-table-body');
-      const rows = appState.history.daily_bars.slice().reverse();
-      tbody.innerHTML = rows.map(r => {
-        const w = (r.avg_w * scale).toFixed(1);
-        const pk = (r.peak_w * scale).toFixed(1);
-        const cpuGpu = `${(r.avg_w * scale * 0.41).toFixed(1)}W / ${(r.avg_w * scale * 0.18).toFixed(1)}W`;
-        const kwh = (r.current_kwh * scale).toFixed(2);
-        const cost = (r.current_kwh * scale * appState.tariff).toFixed(1);
+      const countBadge = document.getElementById('history-count-badge');
+      if (countBadge) countBadge.textContent = `共 ${samples.length} 筆實測感測器記錄`;
+
+      if (samples.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="py-6 text-center text-stone-400">無實測資料 (--)</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = samples.slice(0, 30).map(s => {
         return `
           <tr class="hover:bg-stone-50">
-            <td class="py-2.5 px-3 font-semibold text-stone-800">${r.period}</td>
-            <td class="py-2.5 px-3 text-teal-700 font-bold">${w} W</td>
-            <td class="py-2.5 px-3 text-amber-700">${pk} W</td>
-            <td class="py-2.5 px-3 text-stone-500">${cpuGpu}</td>
-            <td class="py-2.5 px-3 font-semibold">${kwh} 度</td>
-            <td class="py-2.5 px-3 font-bold text-stone-800">NT$ ${cost}</td>
+            <td class="py-2.5 px-3 font-mono text-xs text-stone-800">${fmtStr(s.sampled_at)}</td>
+            <td class="py-2.5 px-3 text-teal-700 font-bold">${fmtNum(s.measured_sensor_total_w, 2, ' W')}</td>
+            <td class="py-2.5 px-3 text-stone-700">${fmtNum(s.cpu_pkg_w, 2, ' W')} <span class="text-xs text-stone-400">(${fmtNum(s.cpu_load_pct, 1, '%')})</span></td>
+            <td class="py-2.5 px-3 text-stone-700">${fmtNum(s.gpu_power_w, 2, ' W')} <span class="text-xs text-stone-400">(${fmtStr(s.gpu_pstate)})</span></td>
+            <td class="py-2.5 px-3 text-stone-400 font-mono">${fmtNum(s.ac_wall_w, 1, ' W')}</td>
+            <td class="py-2.5 px-3 text-xs text-stone-600">
+              CPU: <strong>${fmtNum(s.cpu_temp_c, 1, '°C')}</strong> /
+              GPU: <strong>${fmtNum(s.gpu_temp_c, 1, '°C')}</strong> /
+              MB: <strong>${fmtNum(s.mb_temp_c, 1, '°C')}</strong>
+            </td>
+            <td class="py-2.5 px-3 text-xs text-stone-600">${fmtNum(s.ram_used_gb, 1)} / ${fmtNum(s.ram_total_gb, 1, ' GB')}</td>
           </tr>
         `;
       }).join('');
     }
 
+    function runPresetSQL(type) {
+      const input = document.getElementById('sql-query-input');
+      if (type === 'hourly') {
+        input.value = "SELECT hour_key, avg_sensor_w, peak_sensor_w, avg_cpu_w, avg_gpu_w, ac_wall_w, avg_gpu_temp_c, avg_mb_temp_c, sample_count FROM hourly_logs ORDER BY hour_key DESC;";
+      } else if (type === 'samples') {
+        input.value = "SELECT id, sampled_at, measured_sensor_total_w, cpu_pkg_w, cpu_pp0_w, gpu_power_w, gpu_temp_c, mb_temp_c, cpu_temp_c, ram_power_w, disk_power_w, ac_wall_w FROM sensor_samples ORDER BY id DESC LIMIT 20;";
+      } else if (type === 'apps') {
+        input.value = "SELECT proc_name, display_name, proc_count, cpu_seconds, ram_mb, cpu_share_pct, measured_app_wh FROM app_energy_logs ORDER BY cpu_seconds DESC;";
+      } else if (type === 'controls') {
+        input.value = "SELECT id, executed_at, action, value, result_msg FROM control_logs ORDER BY id DESC;";
+      }
+      executeSQLQuery();
+    }
+
+    async function executeSQLQuery() {
+      const query = document.getElementById('sql-query-input').value.trim();
+      const statusEl = document.getElementById('sql-query-status');
+      const thead = document.getElementById('sql-result-thead');
+      const tbody = document.getElementById('sql-result-tbody');
+
+      if (!query) return;
+
+      // 1. Execute against in-browser SQL.js database (works 100% standalone online!)
+      if (sqlDb) {
+        try {
+          const res = sqlDb.exec(query);
+          if (!res || res.length === 0) {
+            thead.innerHTML = '';
+            tbody.innerHTML = `<tr><td class="p-3 text-stone-400">查詢執行成功，回傳 0 筆資料。</td></tr>`;
+            statusEl.textContent = `✅ 雲端 SQL.js 執行成功 (0 筆結果)`;
+            return;
+          }
+          const cols = res[0].columns;
+          const vals = res[0].values;
+          thead.innerHTML = `<tr>${cols.map(c => `<th class="py-2 px-3 font-bold">${c}</th>`).join('')}</tr>`;
+          tbody.innerHTML = vals.map(row => `
+            <tr class="hover:bg-stone-50">
+              ${row.map(v => `<td class="py-1.5 px-3">${v === null || v === undefined ? '<span class="text-stone-400">--</span>' : v}</td>`).join('')}
+            </tr>
+          `).join('');
+          statusEl.textContent = `✅ 雲端 SQL.js 執行成功：共回傳 ${vals.length} 筆實測記錄 (NULL 欄位自動顯示為 --)`;
+          return;
+        } catch (err) {
+          statusEl.textContent = `❌ SQL 語法或執行錯誤：${err.message}`;
+          return;
+        }
+      }
+
+      // 2. Fallback if SQL.js CDN hasn't finished loading
+      statusEl.textContent = "正在初始化瀏覽器 SQL 引擎...";
+    }
+
+    // =========================================================================
+    // Hardware Control & Cloud Sync Actions
+    // =========================================================================
     async function sendControl(action, value) {
       const fb = document.getElementById('control-feedback');
-      if (fb) fb.textContent = '正在套用硬體電源指令...';
+      if (fb) fb.textContent = '正在執行指令並記錄至 SQL...';
+
+      const nowStr = new Date().toISOString().replace('T', ' ').substring(0, 19);
+
+      // Try local backend first
       try {
-        const res = await fetch(API_BASE + '/api/control', {
+        const apiUrl = (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost')
+          ? '/api/control'
+          : 'http://127.0.0.1:8095/api/control';
+        const res = await fetch(apiUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action, value })
@@ -948,64 +2730,84 @@
         if (res.ok) {
           const data = await res.json();
           if (fb) fb.textContent = '✅ ' + data.message;
-          fetchLiveBackend();
+          await loadTelemetryData();
           return;
         }
       } catch (e) {}
 
-      // Local interactive feedback when previewing offline
+      // Standalone Online Mode: persist setting & control audit log into Cloud/Browser SQL
+      let msg = `已於線上模式記錄指令：${action} = ${value}`;
       if (action === 'set_power_mode') {
-        const modeMap = {
-          eco: { name: '省電靜音模式 (Power Saver)', w: 54.2 },
-          balanced: { name: '平衡模式 (Balanced)', w: 71.5 },
-          performance: { name: '高效能算力模式 (High Perf)', w: 92.8 }
+        const names = {
+          eco: '省電 (Power Saver)',
+          balanced: '平衡 (Balanced)',
+          performance: '高效能 (High Performance)'
         };
-        if (modeMap[value]) {
-          NODE_PROFILES[currentNode].power_mode_name = modeMap[value].name;
-          NODE_PROFILES[currentNode].ac_total_w = modeMap[value].w;
-          NODE_PROFILES[currentNode].dc_total_w = Number((modeMap[value].w * 0.86).toFixed(1));
-          if (fb) fb.textContent = `✅ 已切換至：${modeMap[value].name}`;
-        }
-      } else if (action === 'unload_ollama') {
-        if (fb) fb.textContent = '✅ 已釋放閒置 AI 模型顯存與背景負載';
+        if (cloudData.live) cloudData.live.power_mode_name = names[value] || value;
+        msg = `已更新電源配置設定為：${names[value] || value} (並寫入 SQL control_logs)`;
+      } else if (action === 'set_tariff') {
+        localStorage.setItem('unipower_tariff', String(value));
+        if (cloudData.live) cloudData.live.tariff_ntd_per_kwh = parseFloat(value);
+        msg = `已更新每度電單價為 NT$ ${value}`;
       }
+
+      const localCtrls = JSON.parse(localStorage.getItem('unipower_ctrl_logs') || '[]');
+      localCtrls.unshift({
+        id: Date.now(),
+        executed_at: nowStr,
+        action: action,
+        value: String(value),
+        result_msg: msg
+      });
+      localStorage.setItem('unipower_ctrl_logs', JSON.stringify(localCtrls.slice(0, 50)));
+
+      if (fb) fb.textContent = '✅ ' + msg;
+      await rebuildInBrowserSQLite();
       renderAll();
     }
 
+    async function syncToGitHubCloud() {
+      const statusEl = document.getElementById('sql-query-status');
+      if (statusEl) statusEl.textContent = '☁️ 正在同步最新實測 SQL 資料...';
+      await sendControl('sync_cloud_github', '1');
+      await loadTelemetryData();
+      if (statusEl) statusEl.textContent = '✅ 已同步最新雲端 SQL 資料庫 (cloud_db.json)！';
+    }
+
     function promptTariff() {
-      const val = prompt('請設定每度電 (kWh) 單價 (新台幣 NT$)：', String(appState.tariff));
+      const cur = cloudData.live?.tariff_ntd_per_kwh || 4.5;
+      const val = prompt('請設定每度電 (kWh) 單價 (新台幣 NT$)：', String(cur));
       if (val && !isNaN(parseFloat(val))) {
-        appState.tariff = parseFloat(val);
-        sendControl('set_tariff', appState.tariff);
-        renderAll();
+        sendControl('set_tariff', parseFloat(val));
       }
     }
 
     function exportCSV() {
-      const rows = [['日期', '平均功耗(W)', '峰值功耗(W)', '累積用電(度kWh)', '預估電費(NT$)']];
-      appState.history.daily_bars.forEach(r => {
-        rows.push([r.period, r.avg_w, r.peak_w, r.current_kwh, (r.current_kwh * appState.tariff).toFixed(1)]);
+      const samples = (cloudData.sql_tables && cloudData.sql_tables.sensor_samples) || [];
+      const header = ['id', 'sampled_at', 'hostname', 'power_scheme', 'measured_sensor_total_w', 'cpu_pkg_w', 'cpu_pp0_w', 'cpu_load_pct', 'cpu_temp_c', 'gpu_power_w', 'gpu_temp_c', 'gpu_pstate', 'ram_used_gb', 'ram_total_gb', 'ram_power_w', 'disk_used_gb', 'disk_total_gb', 'disk_power_w', 'mb_temp_c', 'ac_wall_w'];
+      const rows = [header];
+      samples.forEach(s => {
+        rows.push(header.map(k => (s[k] === null || s[k] === undefined) ? '--' : s[k]));
       });
       const csv = '\uFEFF' + rows.map(e => e.join(',')).join('\n');
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `power_report_${currentNode}.csv`;
+      a.download = `unipower_real_sensors_${currentNode}.csv`;
       a.click();
     }
 
-    function renderAll(scaleFactor = null) {
-      renderOverviewChart(scaleFactor);
+    function renderAll() {
+      renderOverviewChart();
       renderDeviceCards();
       renderBatteryTab();
       renderHistoryTable();
     }
 
     window.addEventListener('DOMContentLoaded', () => {
-      renderAll();
-      fetchLiveBackend();
-      setInterval(fetchLiveBackend, 10000);
+      loadTelemetryData();
+      setInterval(loadTelemetryData, 10000);
     });
   </script>
 </body>
